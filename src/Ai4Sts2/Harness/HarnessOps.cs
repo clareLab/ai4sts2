@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
@@ -93,6 +94,7 @@ public static class HarnessOps
             "wb.nextact" => Result(WorkbenchNextAct()),
             "wb.evalreward" => Result(WorkbenchEvalReward(request.Args)),
             "wb.evalsmith" => Result(WorkbenchEvalSmith(request.Args)),
+            "wb.evalrest" => Result(WorkbenchEvalRest(request.Args)),
             "wb.evalpath" => Result(WorkbenchEvalPath(request.Args)),
             "wb.evalevent" => Result(WorkbenchEvalEvent(request.Args)),
             "wb.evalshop" => Result(WorkbenchEvalShop(request.Args)),
@@ -583,6 +585,56 @@ public static class HarnessOps
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var evaluation = Rollout.EvaluateEvent(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchEvalRest(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var session = Session.Instance;
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not RestSiteRoom)
+        {
+            throw new InvalidOperationException("not at a rest site");
+        }
+        var slot = PlayerOf(a);
+        var player = run.Players[slot];
+        var options = RunManager.Instance.RestSiteSynchronizer.GetOptionsForPlayer(player).ToList();
+        var choices = new List<(string Label, int? Index, Action Apply)>();
+        foreach (var option in options)
+        {
+            if (option.OptionId == "HEAL" && option.IsEnabled)
+            {
+                var amount = (int)HealRestSiteOption.GetHealAmount(player);
+                choices.Add(
+                    (
+                        "HEAL",
+                        null,
+                        new Action(() =>
+                            session.Pump.Drive(() => CreatureCmd.Heal(player.Creature, amount, false), "rest heal")
+                        )
+                    )
+                );
+            }
+        }
+        if (options.Any(o => o.OptionId == "SMITH" && o.IsEnabled))
+        {
+            var deck = player.Deck.Cards.Where(c => c.IsUpgradable).ToList();
+            var seen = new HashSet<string>();
+            for (var i = 0; i < deck.Count; i++)
+            {
+                var key = $"{deck[i].Id.Entry}+{deck[i].CurrentUpgradeLevel}";
+                if (!seen.Add(key))
+                {
+                    continue;
+                }
+                var index = i;
+                choices.Add(
+                    ($"SMITH {key}", index, new Action(() => CardCmd.Upgrade(deck[index], CardPreviewStyle.None)))
+                );
+            }
+        }
+        var evaluation = Rollout.EvaluateChoices(session, "rest", choices, SearchOptionsFrom(a), PlanFrom(a));
+        return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
     private static object WorkbenchEvalSmith(JsonElement? args)

@@ -305,14 +305,15 @@ public static class Rollout
             }
             wins++;
         }
-        var score = (wins * 1000) - (lost * 10) - ((fights - wins) * 5000);
+        var hpAfterFights = run.Players.Sum(p => p.Creature.CurrentHp);
+        var score = (wins * 1000) + (hpAfterFights * 10) - ((fights - wins) * 5000);
         FightSummary? boss = null;
         var bossDamage = 0;
         if (plan.Boss && wins == fights)
         {
             var encounter = run.Act.PullNextEncounter(RoomType.Boss);
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
-            var state = session.StartEncounter(encounter.Id.Entry, true);
+            var state = session.StartEncounter(encounter.Id.Entry, false);
             var bossMax = state.Enemies.Sum(e => e.MaxHp);
             var (won, turns, nodes, micros) = PlayCombat(session, options, plan.BossTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
@@ -320,7 +321,7 @@ public static class Rollout
             bossDamage = bossMax - remaining;
             boss = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
             var alive = run.Players.Any(p => p.Creature.IsAlive);
-            score += (bossDamage * 3) - (Math.Max(0, before - after) * 6) + (won ? 3000 : 0) - (alive ? 0 : 4000);
+            score += (bossDamage * 3) + (after * 6) - (hpAfterFights * 6) + (won ? 3000 : 0) - (alive ? 0 : 4000);
         }
         return new RolloutSummary(fights, wins, lost, score, details, boss, bossDamage);
     }
@@ -363,7 +364,9 @@ public static class Rollout
                     _ = Loader.Restore(root, session.Pump);
                 }
                 var keep = Math.Max(3, (applies.Count + 1) / 2);
-                finalists = finalists.OrderByDescending(i => results[i].Score).Take(keep).ToList();
+                var ordered = finalists.OrderByDescending(i => results[i].Score).ToList();
+                var cut = results[ordered[Math.Min(keep, ordered.Count) - 1]].Score;
+                finalists = ordered.Where((i, rank) => rank < keep || results[i].Score >= cut).ToList();
             }
             foreach (var i in finalists)
             {

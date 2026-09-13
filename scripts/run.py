@@ -215,8 +215,6 @@ def weakest(players):
 
 
 def handle_rest(wb, a, entry, v, players):
-    before_boss = v["actFloor"] >= 14
-    threshold = 0.85 if before_boss else 0.6
     options = []
     upgraded = []
     for slot, p in enumerate(players):
@@ -224,18 +222,20 @@ def handle_rest(wb, a, entry, v, players):
         if p["hp"] <= 0:
             options.append(None)
             continue
-        wanted = "HEAL" if p["hp"] < p["maxHp"] * threshold else "SMITH"
-        option = next((o for o in v["restOptions"] if o.upper() == wanted), v["restOptions"][0])
-        if option.upper() == "SMITH":
-            ev = wb.call("wb.evalsmith", {"player": slot, **plan_args(a)})["evaluation"]
-            entry.setdefault("smithEvaluations", []).append(ev)
-            if slot == 0:
-                entry["evaluation"] = ev
-            best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
-            if best is not None and best.get("index") is not None:
-                wb.call("selector.enqueue", {"choice": [best["index"]]})
-                upgraded[slot] = ev["best"]
-        options.append(option)
+        ev = wb.call("wb.evalrest", {"player": slot, **plan_args(a)})["evaluation"]
+        entry.setdefault("smithEvaluations", []).append(ev)
+        if slot == 0:
+            entry["evaluation"] = ev
+        best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+        if best is None:
+            options.append(v["restOptions"][0])
+            continue
+        if best["label"].startswith("SMITH") and best.get("index") is not None:
+            wb.call("selector.enqueue", {"choice": [best["index"]]})
+            upgraded[slot] = best["label"][6:]
+            options.append(next((o for o in v["restOptions"] if o.upper() == "SMITH"), v["restOptions"][0]))
+        else:
+            options.append(next((o for o in v["restOptions"] if o.upper() == "HEAL"), v["restOptions"][0]))
     res = wb.call("wb.rest", {"options": options})
     entry["rest"] = {
         "option": options[0],
