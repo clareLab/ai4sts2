@@ -87,14 +87,54 @@ def report(tag=None, character=None, players=None, since=None):
     return out
 
 
+def perf(tag=None, character=None, players=None, since=None):
+    by_type = defaultdict(list)
+    nodes = []
+    for row in metrics.load_index():
+        if row.get("kind") != "run":
+            continue
+        if tag is not None and row.get("tag") != tag:
+            continue
+        if character is not None and row.get("character") != character:
+            continue
+        if players is not None and row.get("players", 1) != players:
+            continue
+        if since is not None and row.get("ts", "") < since:
+            continue
+        run = metrics.load_run(row["id"])
+        if run is None:
+            continue
+        for case in (run.get("detail") or {}).get("cases", []):
+            for fl in case.get("floorsDetail") or []:
+                by_type[fl.get("type") or fl.get("room")].append(fl.get("wallSeconds", 0))
+                if "combat" in fl and fl["combat"].get("turns"):
+                    nodes.append(fl["combat"]["nodes"] / fl["combat"]["turns"])
+    if not by_type:
+        print("no floors")
+        return
+    print(f"{'room':<10} {'n':>5} {'median s':>9} {'p90 s':>7} {'max s':>7} {'total s':>8}")
+    for kind, walls in sorted(by_type.items(), key=lambda kv: -sum(kv[1])):
+        walls.sort()
+        print(
+            f"{kind:<10} {len(walls):>5} {statistics.median(walls):>9.1f} {walls[int(len(walls) * 0.9) - 1 if len(walls) > 1 else 0]:>7.1f} {walls[-1]:>7.1f} {sum(walls):>8.0f}"
+        )
+    if nodes:
+        nodes.sort()
+        print(f"nodes/turn median {statistics.median(nodes):.0f} p90 {nodes[int(len(nodes) * 0.9) - 1]:.0f}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag")
     ap.add_argument("--character")
     ap.add_argument("--players", type=int)
     ap.add_argument("--since")
+    ap.add_argument("--perf", action="store_true")
     a = ap.parse_args()
-    report(a.tag, a.character.upper() if a.character else None, a.players, a.since)
+    character = a.character.upper() if a.character else None
+    report(a.tag, character, a.players, a.since)
+    if a.perf:
+        perf(a.tag, character, a.players, a.since)
 
 
 if __name__ == "__main__":
