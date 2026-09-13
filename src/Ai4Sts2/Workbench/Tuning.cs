@@ -19,6 +19,12 @@ public static class Tuning
 
     public static bool Doom { get; set; } = true;
 
+    public static int FocusFire { get; set; } = 7;
+
+    public static int LevelDivisor { get; set; } = 5;
+
+    public static int TotalFactor { get; set; } = 8;
+
     private static readonly Dictionary<string, object?> _defaults = Properties()
         .ToDictionary(p => p.Name, p => p.GetValue(null));
 

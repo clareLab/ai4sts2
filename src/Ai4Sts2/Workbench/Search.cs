@@ -14,7 +14,7 @@ public sealed record SearchOptions(
     double Escalate = double.NegativeInfinity
 )
 {
-    public int TotalBudget => MaxTotalNodes > 0 ? MaxTotalNodes : MaxNodes * 4;
+    public int TotalBudget => MaxTotalNodes > 0 ? MaxTotalNodes : MaxNodes * Tuning.TotalFactor;
 }
 
 public interface ISearchDomain<TAction>
@@ -139,7 +139,12 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         try
         {
             var candidates = new List<Candidate>();
-            _budget = _nodes + options.MaxNodes;
+            var level = options.MaxNodes;
+            for (var t = 1; t < turn; t++)
+            {
+                level /= Math.Max(1, Tuning.LevelDivisor);
+            }
+            _budget = _nodes + Math.Max(150, level);
             var estimated = Explore(0, [], candidates, out var best);
             _exhausted &= _nodes < _budget && _nodes < _totalBudget;
             if (turn == 1)

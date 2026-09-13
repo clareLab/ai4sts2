@@ -204,12 +204,21 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 score += (maxHp * 10) + 500 + (enemy is null ? 0 : 1_000);
             }
         }
+        var weakest = int.MaxValue;
         foreach (var enemy in state.Enemies)
         {
             if (enemy.CombatId is { } id && !_rootEnemyMaxHp.ContainsKey(id))
             {
                 score -= enemy.CurrentHp * 10;
             }
+            if (enemy.IsAlive && enemy.MaxHp < 1_000_000)
+            {
+                weakest = Math.Min(weakest, enemy.CurrentHp);
+            }
+        }
+        if (weakest != int.MaxValue)
+        {
+            score -= Tuning.FocusFire * weakest;
         }
         foreach (var player in players)
         {
@@ -241,6 +250,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             return score;
         }
         var targets = state.PlayerCreatures;
+        var incoming = new int[state.Players.Count];
         foreach (var enemy in state.Enemies)
         {
             if (!enemy.IsAlive || enemy.Monster?.NextMove is not { } move)
@@ -254,22 +264,30 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 {
                     continue;
                 }
-                foreach (var player in state.Players)
+                for (var p = 0; p < state.Players.Count; p++)
                 {
-                    var creature = player.Creature;
-                    if (!creature.IsAlive)
+                    var player = state.Players[p];
+                    if (!player.Creature.IsAlive)
                     {
                         continue;
                     }
                     using var scope = Session.ActAs(player);
-                    var damage = attack.GetTotalDamage(targets, enemy);
-                    var through = Math.Max(0, damage + SelfDamage(creature) - creature.Block - Plating(creature));
-                    score -= through * HpWeight;
-                    if (through >= creature.CurrentHp)
-                    {
-                        score -= 100_000 + (Tuning.GradedLethal ? 200 * (through - creature.CurrentHp) : 0);
-                    }
+                    incoming[p] += attack.GetTotalDamage(targets, enemy);
                 }
+            }
+        }
+        for (var p = 0; p < state.Players.Count; p++)
+        {
+            var creature = state.Players[p].Creature;
+            if (!creature.IsAlive)
+            {
+                continue;
+            }
+            var through = Math.Max(0, incoming[p] + SelfDamage(creature) - creature.Block - Plating(creature));
+            score -= through * HpWeight;
+            if (through >= creature.CurrentHp)
+            {
+                score -= 100_000 + (Tuning.GradedLethal ? 200 * (through - creature.CurrentHp) : 0);
             }
         }
         return score;
@@ -518,7 +536,12 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     {
         foreach (var power in c.Powers.OrderBy(p => p.Id.Entry, StringComparer.Ordinal))
         {
-            sb.Append(power.Id.Entry).Append('=').Append(power.Amount).Append(',');
+            sb.Append(power.Id.Entry).Append('=').Append(power.Amount);
+            if (power is SurroundedPower surrounded)
+            {
+                sb.Append('/').Append((int)surrounded.Facing);
+            }
+            sb.Append(',');
         }
     }
 }
