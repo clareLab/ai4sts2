@@ -348,11 +348,20 @@ def play_run(wb, a, seed):
     )
     floors = []
     outcome = "running"
+    handled_event = None
     for _ in range(a.max_floors):
         view = wb.call("wb.view")["view"]
         state = wb.call("run.state")
         me = state["players"][0]
-        if view["room"] == "EventRoom" and view["event"] and not view["eventFinished"]:
+        pending = [o for o in view["eventOptions"] if not o["locked"] and not o["chosen"]]
+        if (
+            view["room"] == "EventRoom"
+            and view["event"]
+            and not view["eventFinished"]
+            and pending
+            and handled_event != (view["floor"], view["event"])
+        ):
+            handled_event = (view["floor"], view["event"])
             t1 = time.time()
             entry = {
                 "floor": view["floor"],
