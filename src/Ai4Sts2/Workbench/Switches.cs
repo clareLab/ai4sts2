@@ -1,6 +1,8 @@
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Rewards;
+using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Settings;
 using MegaCrit.Sts2.Core.TestSupport;
@@ -20,8 +22,29 @@ public static class Switches
         TestMode.IsOn = true;
         NonInteractiveMode.AutoSlayerCheck = static () => true;
         LocalContext.NetId = localNetId;
+        RewardsSet.testSelector = SelectRewardsLeniently;
         Applied = true;
         Patches.Apply();
+    }
+
+    private static async Task SelectRewardsLeniently(RewardsSet set)
+    {
+        var sync = RunManager.Instance.RewardsSetSynchronizer;
+        foreach (var reward in set.Rewards.ToList())
+        {
+            try
+            {
+                _ = await sync.SelectLocalReward(reward);
+            }
+            catch (InvalidOperationException e)
+            {
+                Entry.Log.Warn($"reward {reward} not taken: {e.Message}");
+            }
+        }
+        if (!sync.IsRewardsSetCompleted(set))
+        {
+            sync.SkipLocalRewardsSet();
+        }
     }
 
     public static void ApplyLate()
