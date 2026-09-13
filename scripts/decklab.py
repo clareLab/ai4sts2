@@ -63,7 +63,8 @@ def evaluate(wb, case, config, salt, anchors, max_turns):
     search, tune = split_tuning(config)
     wb.call("wb.tune", tune)
     plan = {"maxTurns": max_turns, "maxDepth": 8, "leaf": "estimate", "beam": 3, "maxNodes": 400, **search}
-    res = wb.call("wb.evaladd", {"cards": case["offered"] + anchors, "salt": salt, **plan})["evaluation"]
+    stride = max(1, int(plan.get("samples", 1) or 1))
+    res = wb.call("wb.evaladd", {"cards": case["offered"] + anchors, "salt": salt * stride, **plan})["evaluation"]
     return {
         "best": res["best"],
         "scores": {o["label"]: o["rollout"]["score"] for o in res["options"]},
