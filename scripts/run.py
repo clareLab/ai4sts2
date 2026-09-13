@@ -14,7 +14,7 @@ def choose_point(view, hp, max_hp, floor):
         return None
     ratio = hp / max(1, max_hp)
     order = list(PREFERENCE)
-    if ratio < 0.5 and any(c["type"] == "RestSite" for c in choices):
+    if ratio < 0.6 and any(c["type"] == "RestSite" for c in choices):
         order.remove("RestSite")
         order.insert(0, "RestSite")
     if ratio < 0.7 or floor < 4:
@@ -256,7 +256,9 @@ def play_run(wb, a, seed):
         elif v["room"] == "MerchantRoom":
             handle_shop(wb, a, entry)
         elif v["restOptions"]:
-            wanted = "HEAL" if me["hp"] < me["maxHp"] * 0.6 else "SMITH"
+            before_boss = v["actFloor"] >= 14
+            threshold = 0.85 if before_boss else 0.6
+            wanted = "HEAL" if me["hp"] < me["maxHp"] * threshold else "SMITH"
             option = next((o for o in v["restOptions"] if o.upper() == wanted), v["restOptions"][0])
             if option.upper() == "SMITH":
                 ev = wb.call("wb.evalsmith", plan_args(a))["evaluation"]
