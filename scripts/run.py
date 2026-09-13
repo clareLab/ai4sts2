@@ -295,6 +295,40 @@ def take_rewards(wb, a, entry):
     entry["taken"] = taken
 
 
+def finish_floor(wb, a, entry, floors, t1):
+    players_after = wb.call("run.state")["players"]
+    after = players_after[0]
+    entry["hpAfter"] = after["hp"]
+    entry["hpAfterAll"] = [p["hp"] for p in players_after]
+    entry["deckSize"] = len(after["deck"])
+    entry["gold"] = after["gold"]
+    entry["wallSeconds"] = round(time.time() - t1, 3)
+    floors.append(entry)
+    label = f"  floor {entry['floor']:>2} {entry['type']:<8} {entry.get('model') or entry['room']:<28}"
+    if all(h <= 0 for h in entry["hpAfterAll"]):
+        print(f"{label} died")
+        return
+    hp_before = "+".join(str(h) for h in entry["hpBeforeAll"]) if a.players > 1 else f"{entry['hpBefore']:>3}"
+    hp_after = "+".join(str(h) for h in entry["hpAfterAll"]) if a.players > 1 else f"{entry['hpAfter']:>3}"
+    print(
+        f"{label} hp {hp_before} -> {hp_after}"
+        + (f"  combat {entry['combat']['turns']} turns {entry['combat']['nodes']} nodes" if "combat" in entry else "")
+        + (f"  took {[t.get('card') or t.get('value') for t in entry['taken']]}" if entry.get("taken") else "")
+        + (
+            f"  rest {'/'.join(o or '-' for o in entry['rest']['options'])} {'/'.join(u or '-' for u in entry['rest']['upgradedAll'])}"
+            if entry.get("rest")
+            else ""
+        )
+        + (f"  event {entry['event']['chosen']}" if entry.get("event") else "")
+        + (
+            f"  relic {'/'.join(str(r) for r in entry['treasure'].get('pickedAll') or [entry['treasure']['picked']])}"
+            if entry.get("treasure")
+            else ""
+        )
+        + (f"  shop {[b.get('id') or b.get('card') for b in entry['shop']['bought']]}" if entry.get("shop") else "")
+    )
+
+
 def play_run(wb, a, seed):
     t0 = time.time()
     run = wb.call(
@@ -307,6 +341,27 @@ def play_run(wb, a, seed):
         view = wb.call("wb.view")["view"]
         state = wb.call("run.state")
         me = state["players"][0]
+        if view["room"] == "EventRoom" and view["event"] and not view["eventFinished"]:
+            t1 = time.time()
+            entry = {
+                "floor": view["floor"],
+                "actFloor": view["actFloor"],
+                "coord": view["coord"],
+                "type": "Ancient",
+                "room": view["room"],
+                "model": view["event"],
+                "hpBefore": me["hp"],
+                "hpBeforeAll": [p["hp"] for p in state["players"]],
+                "choices": [],
+                "routeScores": None,
+                "pathEvaluation": None,
+            }
+            alive = handle_event(wb, a, entry)
+            finish_floor(wb, a, entry, floors, t1)
+            if not alive:
+                outcome = "died"
+                break
+            continue
         weak = weakest(state["players"])
         choice, route_scores = (
             choose_route(wb, view, weak, me["gold"], view["floor"]) if view["choices"] else (None, None)
@@ -369,41 +424,10 @@ def play_run(wb, a, seed):
             handle_shop(wb, a, entry)
         elif v["restOptions"]:
             handle_rest(wb, a, entry, v, state["players"])
-        players_after = wb.call("run.state")["players"]
-        after = players_after[0]
-        entry["hpAfter"] = after["hp"]
-        entry["hpAfterAll"] = [p["hp"] for p in players_after]
-        entry["deckSize"] = len(after["deck"])
-        entry["gold"] = after["gold"]
-        entry["wallSeconds"] = round(time.time() - t1, 3)
-        floors.append(entry)
+        finish_floor(wb, a, entry, floors, t1)
         if not alive:
             outcome = "died"
-            print(f"  floor {entry['floor']:>2} {choice['type']:<8} {entry.get('model') or entry['room']:<28} died")
             break
-        hp_before = "+".join(str(h) for h in entry["hpBeforeAll"]) if a.players > 1 else f"{entry['hpBefore']:>3}"
-        hp_after = "+".join(str(h) for h in entry["hpAfterAll"]) if a.players > 1 else f"{entry['hpAfter']:>3}"
-        print(
-            f"  floor {entry['floor']:>2} {choice['type']:<8} {entry.get('model') or entry['room']:<28} hp {hp_before} -> {hp_after}"
-            + (
-                f"  combat {entry['combat']['turns']} turns {entry['combat']['nodes']} nodes"
-                if "combat" in entry
-                else ""
-            )
-            + (f"  took {[t.get('card') or t.get('value') for t in entry['taken']]}" if entry.get("taken") else "")
-            + (
-                f"  rest {'/'.join(o or '-' for o in entry['rest']['options'])} {'/'.join(u or '-' for u in entry['rest']['upgradedAll'])}"
-                if entry.get("rest")
-                else ""
-            )
-            + (f"  event {entry['event']['chosen']}" if entry.get("event") else "")
-            + (
-                f"  relic {'/'.join(str(r) for r in entry['treasure'].get('pickedAll') or [entry['treasure']['picked']])}"
-                if entry.get("treasure")
-                else ""
-            )
-            + (f"  shop {[b.get('id') or b.get('card') for b in entry['shop']['bought']]}" if entry.get("shop") else "")
-        )
         if outcome == "act-cleared":
             break
     final = wb.call("run.state")
