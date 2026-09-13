@@ -63,7 +63,13 @@ def plan_route(map_view, ratio, gold):
         memo[key] = (value + total, child)
         return memo[key]
 
-    return {(c["col"], c["row"]): best((c["col"], c["row"]), ratio)[0] for c in map_view["choices"]}
+    scores = {(c["col"], c["row"]): best((c["col"], c["row"]), ratio)[0] for c in map_view["choices"]}
+
+    def future(coord, hp):
+        children = [tuple(c) for c in points[coord]["children"]]
+        return max((best(c, hp)[0] for c in children), default=hp * 250)
+
+    return scores, future
 
 
 def choose_route(wb, view, weak, gold, floor):
@@ -72,12 +78,33 @@ def choose_route(wb, view, weak, gold, floor):
     except HarnessError:
         return choose_point(view, weak["hp"], weak["maxHp"], floor), None
     map_view["choices"] = view["choices"]
-    scores = plan_route(map_view, weak["hp"] / max(1, weak["maxHp"]), gold)
+    scores, future = plan_route(map_view, weak["hp"] / max(1, weak["maxHp"]), gold)
     if not scores:
-        return choose_point(view, weak["hp"], weak["maxHp"], floor), None
+        return choose_point(view, weak["hp"], weak["maxHp"], floor), None, None
     coord = max(scores, key=scores.get)
     choice = next(c for c in view["choices"] if (c["col"], c["row"]) == coord)
-    return choice, {f"{k[0]},{k[1]}": round(v, 1) for k, v in scores.items()}
+    return choice, {f"{k[0]},{k[1]}": round(v, 1) for k, v in scores.items()}, future
+
+
+def blend_paths(wb, a, view, weak, future):
+    kinds = {c["type"] for c in view["choices"]}
+    if len(view["choices"]) < 2 or (len(kinds) < 2 and not kinds & {"Elite", "Unknown"}):
+        return None, None
+    path_eval = wb.call(
+        "wb.evalpath", {"maxTurns": a.max_turns, "maxNodes": a.rollout_nodes, "beam": a.rollout_beam, "turns": 1}
+    )["evaluation"]
+    combined = {}
+    for option in path_eval["options"]:
+        if option.get("error"):
+            continue
+        c = option["choice"]
+        ratio = option["hp"] / max(1, weak["maxHp"])
+        combined[(c["col"], c["row"])] = option["score"] + 3 * future((c["col"], c["row"]), ratio)
+    path_eval["combined"] = {f"{k[0]},{k[1]}": round(v, 1) for k, v in combined.items()}
+    if not combined:
+        return path_eval, None
+    coord = max(combined, key=combined.get)
+    return path_eval, next(c for c in view["choices"] if (c["col"], c["row"]) == coord)
 
 
 def autoplay(wb, a, hard=False):
@@ -391,25 +418,19 @@ def play_run(wb, a, seed):
                         print(f"    event {after['event']} could not be finished: {str(e)[:120]}")
             continue
         weak = weakest(state["players"])
-        choice, route_scores = (
-            choose_route(wb, view, weak, me["gold"], view["floor"]) if view["choices"] else (None, None)
+        choice, route_scores, future = (
+            choose_route(wb, view, weak, me["gold"], view["floor"]) if view["choices"] else (None, None, None)
         )
         if choice is None:
             outcome = "stuck"
             break
         t1 = time.time()
         path_eval = None
-        if a.paths and len(view["choices"]) > 1:
+        if a.paths and future is not None:
             try:
-                path_eval = wb.call(
-                    "wb.evalpath", {"maxTurns": a.max_turns, "maxNodes": a.max_nodes, "beam": a.beam, "turns": 1}
-                )["evaluation"]
-                if path_eval.get("best"):
-                    choice = next(
-                        c
-                        for c in view["choices"]
-                        if c["col"] == path_eval["best"]["col"] and c["row"] == path_eval["best"]["row"]
-                    )
+                path_eval, blended = blend_paths(wb, a, view, weak, future)
+                if blended is not None:
+                    choice = blended
             except HarnessError as e:
                 path_eval = {"error": str(e)[:300]}
         res = wb.call("wb.travel", {"col": choice["col"], "row": choice["row"]})
