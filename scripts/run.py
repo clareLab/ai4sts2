@@ -519,6 +519,7 @@ def main():
     ap.add_argument("--max-floors", type=int, default=20)
     ap.add_argument("--max-nodes", type=int, default=400)
     ap.add_argument("--record", action="store_true")
+    ap.add_argument("--tune", action="append", default=[])
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=30)
     ap.add_argument("--beam", type=int, default=None)
@@ -557,7 +558,11 @@ def main():
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
     wb = Harness(a.instance, timeout=3600)
     ping = wb.call("ping")
-    wb.call("wb.tune", {"reset": True, "Record": a.record})
+    tune = {
+        k: (int(v) if v.lstrip("-").isdigit() else v.lower() == "true")
+        for k, _, v in (t.partition("=") for t in a.tune)
+    }
+    wb.call("wb.tune", {"reset": True, "Record": a.record, **tune})
     t0 = time.time()
     cases = []
     traces = []
@@ -593,6 +598,7 @@ def main():
             "boss": a.boss,
             "bossTurns": a.boss_turns,
             "elite": a.elite,
+            "tune": tune,
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
             "floors": sum(c["floors"] for c in cases),
