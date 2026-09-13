@@ -330,7 +330,8 @@ public static class Rollout
             wins++;
         }
         var hpAfterFights = run.Players.Sum(p => p.Creature.CurrentHp);
-        var score = (wins * 1000) + (hpAfterFights * 10) - ((fights - wins) * 5000);
+        var score =
+            (wins * 1000) + (hpAfterFights * 10) - ((fights - wins) * 5000) + (run.Players.Sum(p => p.Gold) * 0.6);
         FightSummary? boss = null;
         var bossDamage = 0;
         if (plan.Boss && wins == fights)
