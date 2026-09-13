@@ -392,14 +392,19 @@ public static class Rollout
         return new PathEvaluation(results, best, sw.Elapsed.TotalMicroseconds);
     }
 
-    private static (int Hp, int Gold, int Deck, int Relics, int Potions) Snapshot(RunState run)
+    private static (int Hp, int MaxHp, int Gold, int Deck, int Relics, int Potions) Snapshot(RunState run)
     {
         var players = run.Players;
         return (
             players.Sum(p => p.Creature.CurrentHp),
+            players.Sum(p => p.Creature.MaxHp),
             players.Sum(p => p.Gold),
             players.Sum(p =>
-                p.Deck.Cards.Count(c => c.Rarity != CardRarity.Basic) + p.Deck.Cards.Count(c => c.IsUpgraded)
+                p.Deck.Cards.Count(c =>
+                    c.Rarity != CardRarity.Basic && c.Type is not CardType.Curse and not CardType.Status
+                )
+                + p.Deck.Cards.Count(c => c.IsUpgraded)
+                - (2 * p.Deck.Cards.Count(c => c.Type is CardType.Curse or CardType.Status))
             ),
             players.Sum(p => p.Relics.Count),
             players.Sum(p => p.Potions.Count())
@@ -407,10 +412,11 @@ public static class Rollout
     }
 
     private static double Score(
-        (int Hp, int Gold, int Deck, int Relics, int Potions) before,
-        (int Hp, int Gold, int Deck, int Relics, int Potions) after
+        (int Hp, int MaxHp, int Gold, int Deck, int Relics, int Potions) before,
+        (int Hp, int MaxHp, int Gold, int Deck, int Relics, int Potions) after
     ) =>
         ((after.Hp - before.Hp) * 10)
+        + ((after.MaxHp - before.MaxHp) * 12)
         + ((after.Gold - before.Gold) * 0.6)
         + ((after.Deck - before.Deck) * 40)
         + ((after.Relics - before.Relics) * 120)

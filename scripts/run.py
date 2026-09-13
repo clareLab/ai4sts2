@@ -76,6 +76,8 @@ def handle_event(wb, a, entry):
             pick = next(o for o in options if o["index"] == best["col"])
         except HarnessError as e:
             entry.setdefault("eventEvaluations", []).append({"error": str(e)[:300]})
+            chosen.append("leave (evaluation failed)")
+            break
         try:
             res = wb.call("wb.event", {"index": pick["index"]})
         except HarnessError as e:
@@ -242,8 +244,8 @@ def play_run(wb, a, seed):
             if option.upper() == "SMITH":
                 ev = wb.call("wb.evalsmith", plan_args(a))["evaluation"]
                 entry["evaluation"] = ev
-                best = next(o for o in ev["options"] if o["label"] == ev["best"])
-                if best.get("index") is not None:
+                best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+                if best is not None and best.get("index") is not None:
                     wb.call("selector.enqueue", {"choice": [best["index"]]})
             res = wb.call("wb.rest", {"option": option})
             entry["rest"] = {"option": option, "ok": res["ok"], "upgraded": entry.get("evaluation", {}).get("best")}
