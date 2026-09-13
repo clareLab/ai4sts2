@@ -27,16 +27,16 @@ def choose_point(view, hp, max_hp, floor):
     return choices[0]
 
 
-def autoplay(wb, a):
+def autoplay(wb, a, hard=False):
     return wb.call(
         "wb.autoplay",
         {
             "maxTurns": a.max_turns,
-            "maxNodes": a.max_nodes,
+            "maxNodes": a.boss_nodes if hard else a.max_nodes,
             "maxDepth": a.max_depth,
             "leaf": "estimate",
-            "beam": a.beam,
-            "turns": a.turns,
+            "beam": a.boss_beam if hard else a.beam,
+            "turns": a.boss_turns_search if hard else a.turns,
         },
     )
 
@@ -192,7 +192,7 @@ def play_run(wb, a, seed):
         }
         alive = True
         if v["inCombat"]:
-            alive = combat_entry(entry, autoplay(wb, a))
+            alive = combat_entry(entry, autoplay(wb, a, choice["type"] in ("Boss", "Elite")))
             if alive:
                 take_rewards(wb, a, entry)
                 if choice["type"] == "Boss":
@@ -270,11 +270,14 @@ def main():
     ap.add_argument("--players", type=int, default=1)
     ap.add_argument("--seed", default="AI4STS2")
     ap.add_argument("--max-floors", type=int, default=20)
-    ap.add_argument("--max-nodes", type=int, default=1500)
+    ap.add_argument("--max-nodes", type=int, default=600)
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=30)
-    ap.add_argument("--beam", type=int, default=3)
+    ap.add_argument("--beam", type=int, default=4)
     ap.add_argument("--turns", type=int, default=1)
+    ap.add_argument("--boss-nodes", type=int, default=800)
+    ap.add_argument("--boss-beam", type=int, default=5)
+    ap.add_argument("--boss-turns-search", type=int, default=2)
     ap.add_argument("--fights", type=int, default=2)
     ap.add_argument("--instance", default="wb")
     ap.add_argument("--boss", action="store_true")
@@ -310,6 +313,7 @@ def main():
             "maxDepth": a.max_depth,
             "beam": a.beam,
             "turns": a.turns,
+            "bossSearch": {"maxNodes": a.boss_nodes, "beam": a.boss_beam, "turns": a.boss_turns_search},
             "fights": a.fights,
             "boss": a.boss,
             "bossTurns": a.boss_turns,

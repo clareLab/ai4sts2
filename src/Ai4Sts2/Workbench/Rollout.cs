@@ -52,7 +52,7 @@ public static class Rollout
         bool coordinate
     )
     {
-        var domain = new CombatDomain(session);
+        var domain = new CombatDomain(session) { CanonicalKeys = options.Canonical };
         var (state, _) = Session.Current(0);
         if (!coordinate || state.Players.Count < 2)
         {

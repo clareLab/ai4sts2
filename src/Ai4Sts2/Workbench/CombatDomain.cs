@@ -247,9 +247,18 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return score;
     }
 
-    public string Key() => Key(false);
+    public bool CanonicalKeys { get; set; }
 
-    public string BeamKey() => Key(true);
+    public string Key() => Key(CanonicalKeys ? PileOrder.Ends : PileOrder.Full);
+
+    public string BeamKey() => Key(PileOrder.Set);
+
+    private enum PileOrder
+    {
+        Full,
+        Ends,
+        Set,
+    }
 
     public string Bucket()
     {
@@ -270,7 +279,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return sb.ToString();
     }
 
-    private static string Key(bool canonical)
+    private static string Key(PileOrder order)
     {
         var state = State();
         var sb = new StringBuilder(512);
@@ -297,11 +306,11 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 .Append('|')
                 .Append(Session.HasEnded(player) ? 'e' : 'p')
                 .Append('|');
-            Pile(sb, pcs.Hand, true);
-            Pile(sb, pcs.DrawPile, false);
-            Pile(sb, pcs.DiscardPile, canonical);
-            Pile(sb, pcs.ExhaustPile, canonical);
-            Pile(sb, pcs.PlayPile, canonical);
+            Pile(sb, pcs.Hand, PileOrder.Set);
+            Pile(sb, pcs.DrawPile, PileOrder.Full);
+            Pile(sb, pcs.DiscardPile, order);
+            Pile(sb, pcs.ExhaustPile, order);
+            Pile(sb, pcs.PlayPile, order);
             foreach (var orb in pcs.OrbQueue.Orbs)
             {
                 sb.Append(orb.Id.Entry).Append(',');
@@ -384,10 +393,14 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return score;
     }
 
-    private static void Pile(StringBuilder sb, CardPile pile, bool sorted)
+    private static void Pile(StringBuilder sb, CardPile pile, PileOrder order)
     {
-        var cards = pile.Cards.Select(CardSignature);
-        sb.Append(string.Join(",", sorted ? cards.Order() : cards)).Append('|');
+        var cards = pile.Cards.Select(CardSignature).ToList();
+        if (order == PileOrder.Ends && cards.Count > 2)
+        {
+            sb.Append(cards[0]).Append('>').Append(cards[^1]).Append('>');
+        }
+        sb.Append(string.Join(",", order == PileOrder.Full ? cards : cards.Order())).Append('|');
     }
 
     private static void Powers(StringBuilder sb, Creature c)

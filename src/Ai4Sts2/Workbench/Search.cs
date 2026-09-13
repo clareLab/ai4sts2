@@ -9,7 +9,8 @@ public sealed record SearchOptions(
     int Beam,
     int Turns,
     int MaxTotalNodes = 0,
-    bool Diversify = true
+    bool Diversify = true,
+    bool Canonical = false
 )
 {
     public int TotalBudget => MaxTotalNodes > 0 ? MaxTotalNodes : MaxNodes * 4;
