@@ -31,7 +31,7 @@ public static class Tuning
 
     public static bool Record { get; set; } = Environment.GetEnvironmentVariable("AI4STS2_RECORD") == "1";
 
-    public static int FocusFire { get; set; } = 7;
+    public static int FocusFire { get; set; }
 
     public static int RaceWeight { get; set; } = 25;
 
