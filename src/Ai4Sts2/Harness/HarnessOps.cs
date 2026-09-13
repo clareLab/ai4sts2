@@ -550,7 +550,17 @@ public static class HarnessOps
         var maxTurns = a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var boss = a.TryGetProperty("boss", out var b) && b.GetBoolean();
         var bossTurns = a.TryGetProperty("bossTurns", out var bt) ? bt.GetInt32() : 6;
-        return new RolloutPlan(fights, maxTurns, boss, bossTurns, deckChoice ? Tuning.RolloutHpFloor : 0);
+        var elite = a.TryGetProperty("elite", out var e) ? e.GetBoolean() : Tuning.EliteProbe;
+        var eliteTurns = a.TryGetProperty("eliteTurns", out var et) ? et.GetInt32() : 8;
+        return new RolloutPlan(
+            fights,
+            maxTurns,
+            boss,
+            bossTurns,
+            deckChoice ? Tuning.RolloutHpFloor : 0,
+            deckChoice && elite,
+            eliteTurns
+        );
     }
 
     private static IEnumerable<int> RemovalCandidates(Session session, List<CardModel> deck)

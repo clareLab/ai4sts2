@@ -31,6 +31,8 @@ public static class Tuning
 
     public static int RolloutHpFloor { get; set; } = 65;
 
+    public static bool EliteProbe { get; set; }
+
     public static bool FreezeMap { get; set; } = true;
 
     public static bool Spotlight { get; set; } = true;

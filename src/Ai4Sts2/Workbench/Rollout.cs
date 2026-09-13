@@ -33,11 +33,20 @@ public sealed record RolloutSummary(
     int HpLost,
     double Score,
     IReadOnlyList<FightSummary> Details,
+    FightSummary? Elite,
     FightSummary? Boss,
     int BossDamage
 );
 
-public sealed record RolloutPlan(int Fights, int MaxTurns, bool Boss, int BossTurns, int HpFloor = 0);
+public sealed record RolloutPlan(
+    int Fights,
+    int MaxTurns,
+    bool Boss,
+    int BossTurns,
+    int HpFloor = 0,
+    bool Elite = false,
+    int EliteTurns = 8
+);
 
 public sealed record RewardOptionResult(string Label, int? Card, string? Alternative, RolloutSummary Rollout);
 
@@ -396,6 +405,26 @@ public static class Rollout
         var hpAfterFights = run.Players.Sum(p => p.Creature.CurrentHp);
         var score =
             (wins * 1000) + (hpAfterFights * 10) - ((fights - wins) * 5000) + (run.Players.Sum(p => p.Gold) * 0.6);
+        FightSummary? elite = null;
+        if (plan.Elite && wins == fights)
+        {
+            var encounter = run.Act.PullNextEncounter(RoomType.Elite);
+            var before = run.Players.Sum(p => p.Creature.CurrentHp);
+            var state = session.StartEncounter(encounter.Id.Entry, false);
+            Spotlight(run);
+            var eliteMax = state.Enemies.Sum(e => e.MaxHp);
+            var (won, turns, nodes, micros) = PlayCombat(session, options, plan.EliteTurns);
+            var after = run.Players.Sum(p => p.Creature.CurrentHp);
+            var remaining = state.Enemies.Where(e => e.IsAlive).Sum(e => e.CurrentHp);
+            elite = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
+            var alive = run.Players.Any(p => p.Creature.IsAlive);
+            score += ((eliteMax - remaining) * 3) - ((before - after) * 8) + (won ? 2000 : 0) - (alive ? 0 : 4000);
+            if (!alive)
+            {
+                return new RolloutSummary(fights, wins, lost, score, details, elite, null, 0);
+            }
+            hpAfterFights = after;
+        }
         FightSummary? boss = null;
         var bossDamage = 0;
         if (plan.Boss && wins == fights)
@@ -413,7 +442,7 @@ public static class Rollout
             var alive = run.Players.Any(p => p.Creature.IsAlive);
             score += (bossDamage * 3) + (after * 6) - (hpAfterFights * 6) + (won ? 3000 : 0) - (alive ? 0 : 4000);
         }
-        return new RolloutSummary(fights, wins, lost, score, details, boss, bossDamage);
+        return new RolloutSummary(fights, wins, lost, score, details, elite, boss, bossDamage);
     }
 
     public static ChoiceEvaluation EvaluateChoices(
@@ -448,7 +477,7 @@ public static class Rollout
         {
             if (applies.Count > Tuning.HalvingAbove && Tuning.HalvingAbove > 0)
             {
-                var screen = plan with { Fights = 1, Boss = false };
+                var screen = plan with { Fights = 1, Boss = false, Elite = false };
                 foreach (var i in finalists)
                 {
                     applies[i]();

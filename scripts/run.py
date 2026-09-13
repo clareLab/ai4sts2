@@ -256,6 +256,8 @@ def plan_args(a):
         "beam": a.rollout_beam,
         "boss": a.boss,
         "bossTurns": a.boss_turns,
+        "elite": a.elite,
+        "eliteTurns": a.elite_turns,
         "diversify": not a.no_diversify,
         "canonical": not a.no_canonical,
     }
@@ -526,6 +528,8 @@ def main():
     ap.add_argument("--paths", action="store_true")
     ap.add_argument("--boss", action="store_true")
     ap.add_argument("--boss-turns", type=int, default=6)
+    ap.add_argument("--elite", action="store_true")
+    ap.add_argument("--elite-turns", type=int, default=8)
     ap.add_argument("--tag", default="")
     ap.add_argument("--rollout-nodes", type=int, default=400)
     ap.add_argument("--rollout-beam", type=int, default=3)
@@ -579,6 +583,7 @@ def main():
             "paths": a.paths,
             "boss": a.boss,
             "bossTurns": a.boss_turns,
+            "elite": a.elite,
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
             "floors": sum(c["floors"] for c in cases),
