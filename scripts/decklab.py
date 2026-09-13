@@ -75,6 +75,29 @@ def agreement(bests):
     return sum(1 for a, b in itertools.combinations(bests, 2) if a == b) / max(1, len(bests) * (len(bests) - 1) / 2)
 
 
+def mode(values):
+    values = [v for v in values if v is not None]
+    return max(set(values), key=values.count) if values else None
+
+
+def mean_scores(trials):
+    out = {}
+    for t in trials:
+        for k, v in t["scores"].items():
+            out.setdefault(k, []).append(v)
+    return {k: sum(v) / len(v) for k, v in out.items()}
+
+
+def spearman(a, b):
+    keys = [k for k in a if k in b]
+    if len(keys) < 3:
+        return None
+    ra = {k: i for i, k in enumerate(sorted(keys, key=lambda k: a[k]))}
+    rb = {k: i for i, k in enumerate(sorted(keys, key=lambda k: b[k]))}
+    n = len(keys)
+    return 1 - 6 * sum((ra[k] - rb[k]) ** 2 for k in keys) / (n * (n * n - 1))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", default="")
@@ -109,6 +132,9 @@ def main():
                 except HarnessError as e:
                     trials.append({"error": str(e)[:300], "best": None, "scores": {}, "micros": 0})
             bests = [t["best"] for t in trials]
+            reference = row["results"][next(iter(configs))] if row["results"] else None
+            ref_best = mode(reference["bests"]) if reference else mode(bests)
+            ref_scores = reference["meanScores"] if reference else mean_scores(trials)
             anchor_last = [
                 all(
                     t["scores"].get(x, 0) <= min(v for k, v in t["scores"].items() if k not in anchors) for x in anchors
@@ -118,13 +144,17 @@ def main():
             ]
             row["results"][name] = {
                 "trials": trials,
+                "bests": bests,
+                "meanScores": mean_scores(trials),
                 "agreement": agreement(bests),
+                "agreeRef": sum(1 for b in bests if b == ref_best) / max(1, len(bests)),
+                "rankCorr": spearman(mean_scores(trials), ref_scores),
                 "anchorsLast": sum(anchor_last) / max(1, len(anchor_last)) if anchors else None,
                 "millis": round(sum(t["micros"] for t in trials) / 1000),
             }
         rows.append(row)
         cells = " | ".join(
-            f"agree {r['agreement']:.2f} {'/'.join(str(t['best'])[:10] for t in r['trials'])} {r['millis']:>6}ms"
+            f"agree {r['agreement']:.2f} ref {r['agreeRef']:.2f} {'/'.join(str(t['best'])[:10] for t in r['trials'])} {r['millis']:>6}ms"
             for r in row["results"].values()
         )
         print(f"{case['seed']:<6} f{case['floor']:<3} {case['character'][:6]} deck {len(case['deck']):>2} | {cells}")
@@ -136,6 +166,15 @@ def main():
         "cases": len(rows),
         "agreement": {
             n: round(sum(r["results"][n]["agreement"] for r in rows) / max(1, len(rows)), 3) for n in configs
+        },
+        "agreeRef": {n: round(sum(r["results"][n]["agreeRef"] for r in rows) / max(1, len(rows)), 3) for n in configs},
+        "rankCorr": {
+            n: round(
+                sum(r["results"][n]["rankCorr"] or 0 for r in rows)
+                / max(1, sum(1 for r in rows if r["results"][n]["rankCorr"] is not None)),
+                3,
+            )
+            for n in configs
         },
         "anchorsLast": {
             n: round(sum(r["results"][n]["anchorsLast"] or 0 for r in rows) / max(1, len(rows)), 3) for n in configs
@@ -152,7 +191,7 @@ def main():
     print(
         "agreement",
         " ".join(
-            f"| {n}: {summary['agreement'][n]}"
+            f"| {n}: self {summary['agreement'][n]} ref {summary['agreeRef'][n]} rho {summary['rankCorr'][n]}"
             + (f" anchors-last {summary['anchorsLast'][n]}" if anchors else "")
             + f" {summary['millis'][n]} ms"
             for n in configs
