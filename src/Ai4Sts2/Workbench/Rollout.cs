@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -304,6 +305,46 @@ public static class Rollout
 
     private static bool CoordinateOnly(Session session) => session.Run is { } run && run.Players.Count > 1;
 
+    private static HashSet<CardModel>? _focus;
+
+    private static void Spotlight(RunState run)
+    {
+        if (_focus is null || _focus.Count == 0 || !Tuning.Spotlight)
+        {
+            return;
+        }
+        foreach (var player in run.Players)
+        {
+            if (player.PlayerCombatState is not { } pcs)
+            {
+                continue;
+            }
+            foreach (var card in pcs.DrawPile.Cards.ToList())
+            {
+                if (card.DeckVersion is { } original && _focus.Contains(original))
+                {
+                    pcs.DrawPile.MoveToTopInternal(card);
+                }
+            }
+        }
+    }
+
+    private static Dictionary<CardModel, int> DeckState(RunState run) =>
+        run.Players.SelectMany(p => p.Deck.Cards).ToDictionary(c => c, c => c.CurrentUpgradeLevel);
+
+    private static HashSet<CardModel> Changed(Dictionary<CardModel, int> before, RunState run)
+    {
+        var set = new HashSet<CardModel>();
+        foreach (var card in run.Players.SelectMany(p => p.Deck.Cards))
+        {
+            if (!before.TryGetValue(card, out var level) || level != card.CurrentUpgradeLevel)
+            {
+                _ = set.Add(card);
+            }
+        }
+        return set;
+    }
+
     public static RolloutSummary Fights(Session session, SearchOptions options, RolloutPlan plan)
     {
         using var quiet = Harness.Recorder.Suspend();
@@ -319,6 +360,7 @@ public static class Rollout
             run.Act.MarkRoomVisited(RoomType.Monster);
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
             _ = session.StartEncounter(encounter.Id.Entry, false);
+            Spotlight(run);
             var (won, turns, nodes, micros) = PlayCombat(session, options, maxTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
             details.Add(new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros));
@@ -339,6 +381,7 @@ public static class Rollout
             var encounter = run.Act.PullNextEncounter(RoomType.Boss);
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
             var state = session.StartEncounter(encounter.Id.Entry, false);
+            Spotlight(run);
             var bossMax = state.Enemies.Sum(e => e.MaxHp);
             var (won, turns, nodes, micros) = PlayCombat(session, options, plan.BossTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
@@ -377,6 +420,8 @@ public static class Rollout
         var root = Loader.Take();
         var results = new RolloutSummary[applies.Count];
         finalists = Enumerable.Range(0, applies.Count).ToList();
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var before = DeckState(run);
         try
         {
             if (applies.Count > Tuning.HalvingAbove && Tuning.HalvingAbove > 0)
@@ -385,6 +430,7 @@ public static class Rollout
                 foreach (var i in finalists)
                 {
                     applies[i]();
+                    _focus = Changed(before, run);
                     results[i] = Fights(session, options, screen);
                     _ = Loader.Restore(root, session.Pump);
                 }
@@ -396,12 +442,14 @@ public static class Rollout
             foreach (var i in finalists)
             {
                 applies[i]();
+                _focus = Changed(before, run);
                 results[i] = Fights(session, options, plan);
                 _ = Loader.Restore(root, session.Pump);
             }
         }
         finally
         {
+            _focus = null;
             _ = Loader.Restore(root, session.Pump);
             root.Release();
         }
