@@ -351,44 +351,44 @@ public static class Rollout
 
     private static bool CoordinateOnly(Session session) => session.Run is { } run && run.Players.Count > 1;
 
-    private static HashSet<CardModel>? _focus;
+    [ThreadStatic]
+    private static Dictionary<CardModel, int>? _rank;
 
-    private static void Spotlight(RunState run)
+    [ThreadStatic]
+    private static int _fightOrdinal;
+
+    public static Action<List<CardModel>>? StableOrder => _rank is null || !Tuning.StableShuffle ? null : Reorder;
+
+    private static void Reorder(List<CardModel> cards)
     {
-        if (_focus is null || _focus.Count == 0 || !Tuning.Spotlight)
+        var rank = _rank!;
+        var salt = (uint)(_fightOrdinal + 1) * 0x85EBCA6Bu;
+        var keyed = new (uint Key, int Tie, CardModel Card)[cards.Count];
+        for (var i = 0; i < cards.Count; i++)
         {
-            return;
+            var original = cards[i].DeckVersion ?? cards[i];
+            var r = rank.TryGetValue(original, out var known) ? known : 1_000 + i;
+            var h = ((uint)(r + 1) * 0x9E3779B1u) ^ salt;
+            h ^= h >> 15;
+            h *= 0x2C1B3C6Du;
+            h ^= h >> 12;
+            keyed[i] = (h, r, cards[i]);
         }
-        foreach (var player in run.Players)
+        Array.Sort(keyed, (a, b) => a.Key != b.Key ? a.Key.CompareTo(b.Key) : a.Tie.CompareTo(b.Tie));
+        for (var i = 0; i < cards.Count; i++)
         {
-            if (player.PlayerCombatState is not { } pcs)
-            {
-                continue;
-            }
-            foreach (var card in pcs.DrawPile.Cards.ToList())
-            {
-                if (card.DeckVersion is { } original && _focus.Contains(original))
-                {
-                    pcs.DrawPile.MoveToTopInternal(card);
-                }
-            }
+            cards[i] = keyed[i].Card;
         }
     }
 
-    private static Dictionary<CardModel, int> DeckState(RunState run) =>
-        run.Players.SelectMany(p => p.Deck.Cards).ToDictionary(c => c, c => c.CurrentUpgradeLevel);
-
-    private static HashSet<CardModel> Added(Dictionary<CardModel, int> before, RunState run)
+    private static Dictionary<CardModel, int> Ranks(RunState run)
     {
-        var set = new HashSet<CardModel>();
+        var ranks = new Dictionary<CardModel, int>();
         foreach (var card in run.Players.SelectMany(p => p.Deck.Cards))
         {
-            if (!before.ContainsKey(card))
-            {
-                _ = set.Add(card);
-            }
+            ranks[card] = ranks.Count;
         }
-        return set;
+        return ranks;
     }
 
     private static int Bulk(IEnumerable<Creature> enemies, Func<Creature, int> measure) =>
@@ -416,8 +416,8 @@ public static class Rollout
             var encounter = run.Act.PullNextEncounter(RoomType.Monster);
             run.Act.MarkRoomVisited(RoomType.Monster);
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
+            _fightOrdinal = i;
             _ = session.StartEncounter(encounter.Id.Entry, false);
-            Spotlight(run);
             var (won, turns, nodes, micros) = PlayCombat(session, options, maxTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
             details.Add(new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros));
@@ -436,8 +436,8 @@ public static class Rollout
         {
             var encounter = run.Act.PullNextEncounter(RoomType.Elite);
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
+            _fightOrdinal = 100;
             var state = session.StartEncounter(encounter.Id.Entry, false);
-            Spotlight(run);
             var eliteMax = Bulk(state.Enemies, e => e.MaxHp);
             var (won, turns, nodes, micros) = PlayCombat(session, options, plan.EliteTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
@@ -458,8 +458,8 @@ public static class Rollout
         {
             var encounter = run.Act.PullNextEncounter(RoomType.Boss);
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
+            _fightOrdinal = 200;
             var state = session.StartEncounter(encounter.Id.Entry, false);
-            Spotlight(run);
             var bossMax = Bulk(state.Enemies, e => e.MaxHp);
             var (won, turns, nodes, micros) = PlayCombat(session, options, plan.BossTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
@@ -500,7 +500,7 @@ public static class Rollout
         var results = new RolloutSummary[applies.Count];
         finalists = Enumerable.Range(0, applies.Count).ToList();
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
-        var before = DeckState(run);
+        _rank = Ranks(run);
         try
         {
             if (applies.Count > Tuning.HalvingAbove && Tuning.HalvingAbove > 0)
@@ -509,7 +509,6 @@ public static class Rollout
                 foreach (var i in finalists)
                 {
                     applies[i]();
-                    _focus = Added(before, run);
                     results[i] = Fights(session, options, screen);
                     _ = Loader.Restore(root, session.Pump);
                 }
@@ -521,14 +520,13 @@ public static class Rollout
             foreach (var i in finalists)
             {
                 applies[i]();
-                _focus = Added(before, run);
                 results[i] = Fights(session, options, plan);
                 _ = Loader.Restore(root, session.Pump);
             }
         }
         finally
         {
-            _focus = null;
+            _rank = null;
             _ = Loader.Restore(root, session.Pump);
             root.Release();
         }

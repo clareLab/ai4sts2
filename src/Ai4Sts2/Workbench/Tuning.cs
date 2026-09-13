@@ -43,7 +43,7 @@ public static class Tuning
 
     public static bool FreezeMap { get; set; } = true;
 
-    public static bool Spotlight { get; set; } = true;
+    public static bool StableShuffle { get; set; } = true;
 
     public static bool Record { get; set; } = Environment.GetEnvironmentVariable("AI4STS2_RECORD") == "1";
 

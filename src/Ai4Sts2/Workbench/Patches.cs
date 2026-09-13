@@ -2,6 +2,7 @@ using System.Reflection;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models.Monsters;
@@ -9,10 +10,12 @@ using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
+using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Saves.Managers;
+using MegaCrit.Sts2.Core.TestSupport;
 
 namespace Ai4Sts2.Workbench;
 
@@ -126,6 +129,14 @@ public static class Patches
             nameof(SkipWithoutCombatRoom),
             PatchPurpose.Workaround,
             "8226EB050047"
+        ),
+        new(
+            typeof(CardPile),
+            "RandomizeOrderInternal",
+            [typeof(Player), typeof(Rng), typeof(CombatState)],
+            nameof(ArmStableShuffle),
+            PatchPurpose.Semantics,
+            "DC11BF77C56E"
         ),
         new(typeof(CombatState), "get_Creatures", [], nameof(Creatures), PatchPurpose.Perf, "9FED49BCF1F6"),
         new(typeof(CombatState), "get_PlayerCreatures", [], nameof(PlayerCreatures), PatchPurpose.Perf, "198490C17EB2"),
@@ -291,6 +302,14 @@ public static class Patches
     private static bool SkipVoid() => !Switches.Applied;
 
     private static bool SkipWithoutCombatRoom() => NCombatRoom.Instance is not null;
+
+    private static void ArmStableShuffle()
+    {
+        if (Rollout.StableOrder is { } order)
+        {
+            TestRngInjector.SetInitialShuffleOverride(order);
+        }
+    }
 
     private static bool SkipInt(ref int __result)
     {
