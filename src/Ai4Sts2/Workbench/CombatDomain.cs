@@ -6,12 +6,13 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Entities.Rngs;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.Rooms;
 
 namespace Ai4Sts2.Workbench;
 
-public sealed record SearchAction(string Kind, int Player, int Hand, int? Target, string? Card);
+public sealed record SearchAction(string Kind, int Player, int Hand, int? Target, string? Card, int? Choice = null);
 
 public sealed class CombatDomain : ISearchDomain<SearchAction>
 {
@@ -23,7 +24,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     {
         Session = session;
         var (state, _) = Session.Current(0);
-        _potionValue = state.Encounter?.RoomType is RoomType.Elite or RoomType.Boss ? 40 : 260;
+        _potionValue = state.Encounter?.RoomType is RoomType.Elite or RoomType.Boss ? Tuning.PotionHoldHard : 260;
         foreach (var enemy in state.Enemies)
         {
             if (enemy.CombatId is { } id)
@@ -133,13 +134,31 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return list;
     }
 
-    public TimeSpan Apply(SearchAction action) =>
-        action.Kind switch
+    public TimeSpan Apply(SearchAction action)
+    {
+        Session.Selector.BeginAction(action.Choice);
+        return action.Kind switch
         {
             "end" => Session.EndTurn(action.Player),
             "potion" => Session.UsePotion(action.Player, action.Hand, action.Target),
             _ => Session.Play(action.Player, action.Hand, action.Target),
         };
+    }
+
+    public IReadOnlyList<SearchAction> Variants(SearchAction action)
+    {
+        var options = Session.Selector.Options;
+        if (action.Choice is not null || action.Kind == "end" || options < 2)
+        {
+            return [];
+        }
+        var list = new List<SearchAction>();
+        for (var choice = 1; choice < Math.Min(options, Tuning.MaxVariants); choice++)
+        {
+            list.Add(action with { Choice = choice });
+        }
+        return list;
+    }
 
     public double Evaluate()
     {
@@ -148,7 +167,12 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         if (Terminal)
         {
             var alive = players.Where(p => p.Creature.IsAlive).ToList();
-            return alive.Count == 0 ? -1_000_000 : 1_000_000 + alive.Sum(p => p.Creature.CurrentHp * 100);
+            if (alive.Count > 0)
+            {
+                return 1_000_000 + alive.Sum(p => p.Creature.CurrentHp * 100);
+            }
+            var turn = players.Max(p => p.PlayerCombatState?.TurnNumber ?? 0);
+            return -1_000_000 + (turn * 2_000) + (Dealt(state) * 10);
         }
         double score = 0;
         var present = new Dictionary<uint, Creature>();
@@ -161,7 +185,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         }
         foreach (var (id, maxHp) in _rootEnemyMaxHp)
         {
-            if (present.TryGetValue(id, out var enemy))
+            if (present.TryGetValue(id, out var enemy) && enemy.MaxHp <= maxHp)
             {
                 score += (maxHp - enemy.CurrentHp) * 10;
                 if (!enemy.IsAlive)
@@ -170,10 +194,14 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 }
                 score -= enemy.Block;
                 score += PowerScore(enemy, -1);
+                if (Tuning.Doom)
+                {
+                    score += Doom(enemy);
+                }
             }
             else
             {
-                score += (maxHp * 10) + 500;
+                score += (maxHp * 10) + 500 + (enemy is null ? 0 : 1_000);
             }
         }
         foreach (var enemy in state.Enemies)
@@ -187,6 +215,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         {
             var creature = player.Creature;
             score -= (creature.MaxHp - creature.CurrentHp) * HpWeight;
+            score -= Tuning.ConvexHp * Math.Max(0, (0.4 * creature.MaxHp) - creature.CurrentHp);
             if (!creature.IsAlive)
             {
                 score -= 100_000;
@@ -234,16 +263,69 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     }
                     using var scope = Session.ActAs(player);
                     var damage = attack.GetTotalDamage(targets, enemy);
-                    var through = Math.Max(0, damage - creature.Block);
+                    var through = Math.Max(0, damage + SelfDamage(creature) - creature.Block - Plating(creature));
                     score -= through * HpWeight;
                     if (through >= creature.CurrentHp)
                     {
-                        score -= 100_000;
+                        score -= 100_000 + (Tuning.GradedLethal ? 200 * (through - creature.CurrentHp) : 0);
                     }
                 }
             }
         }
         return score;
+    }
+
+    private static double Doom(Creature enemy)
+    {
+        double score = 0;
+        foreach (var power in enemy.Powers)
+        {
+            if (power is SandpitPower sandpit && sandpit.Target is { IsAlive: true })
+            {
+                score += sandpit.Amount * 150;
+                if (sandpit.Amount <= 1)
+                {
+                    score -= 3_000;
+                }
+            }
+        }
+        return score;
+    }
+
+    private static int Dealt(CombatState state)
+    {
+        var total = 0;
+        foreach (var enemy in state.Enemies)
+        {
+            total += Math.Max(0, enemy.MaxHp - enemy.CurrentHp);
+        }
+        return total;
+    }
+
+    private static int SelfDamage(Creature creature)
+    {
+        var total = 0;
+        foreach (var power in creature.Powers)
+        {
+            if (power is DisintegrationPower)
+            {
+                total += power.Amount;
+            }
+        }
+        return total;
+    }
+
+    private static int Plating(Creature creature)
+    {
+        var total = 0;
+        foreach (var power in creature.Powers)
+        {
+            if (power is PlatingPower)
+            {
+                total += power.Amount;
+            }
+        }
+        return total;
     }
 
     public bool CanonicalKeys { get; set; }
@@ -379,15 +461,45 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private static double PowerScore(Creature creature, int sign)
     {
         double score = 0;
+        var temporaryStrength = 0;
+        var temporaryDexterity = 0;
         foreach (var power in creature.Powers)
         {
+            switch (power)
+            {
+                case TemporaryStrengthPower strength:
+                    temporaryStrength += strength.Sign * strength.Amount;
+                    break;
+                case TemporaryDexterityPower dexterity:
+                    temporaryDexterity += dexterity.Sign * dexterity.Amount;
+                    break;
+                default:
+                    break;
+            }
+        }
+        foreach (var power in creature.Powers)
+        {
+            if (Tuning.TemporaryPowers && power is ITemporaryPower)
+            {
+                continue;
+            }
             var (weight, cap) = PowerWeights.For(power.Id.Entry, sign < 0);
             if (weight == 0)
             {
                 continue;
             }
-            var polarity = power.TypeForCurrentAmount == PowerType.Debuff ? -1 : 1;
-            score += sign * polarity * Math.Min(Math.Abs(power.Amount), cap) * Math.Sign(power.Amount) * weight;
+            var amount = power switch
+            {
+                StrengthPower when Tuning.TemporaryPowers => power.Amount - temporaryStrength,
+                DexterityPower when Tuning.TemporaryPowers => power.Amount - temporaryDexterity,
+                _ => power.Amount,
+            };
+            if (amount == 0)
+            {
+                continue;
+            }
+            var polarity = power.GetTypeForAmount(amount) == PowerType.Debuff ? -1 : 1;
+            score += sign * polarity * Math.Min(Math.Abs(amount), cap) * weight;
         }
         return score;
     }

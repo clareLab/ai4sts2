@@ -219,6 +219,7 @@ public static class Rollout
         bool coordinate = true
     )
     {
+        session.Selector.Clear();
         var sw = Stopwatch.StartNew();
         var turns = 0;
         var nodes = 0;

@@ -31,6 +31,8 @@ public interface ISearchDomain<TAction>
 
     public IReadOnlyList<TAction> Actions();
 
+    public IReadOnlyList<TAction> Variants(TAction action);
+
     public IReadOnlyList<TAction> Closing();
 
     public TimeSpan Apply(TAction action);
@@ -204,9 +206,13 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 }
                 else
                 {
-                    if (domain.Terminal || turn >= options.Turns)
+                    if (domain.Terminal)
                     {
                         real = real1;
+                    }
+                    else if (turn >= options.Turns)
+                    {
+                        real = Tuning.HorizonEstimate ? domain.Estimate() : real1;
                     }
                     else
                     {
@@ -272,6 +278,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                     break;
                 }
                 Apply(action);
+                var variants = domain.Variants(action);
                 path.Add(action);
                 var score = Explore(depth + 1, path, candidates, out var line);
                 path.RemoveAt(path.Count - 1);
@@ -280,6 +287,23 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 {
                     bestScore = score;
                     best = line;
+                }
+                foreach (var variant in variants)
+                {
+                    if (_nodes >= _budget || _nodes >= _totalBudget)
+                    {
+                        break;
+                    }
+                    Apply(variant);
+                    path.Add(variant);
+                    var alt = Explore(depth + 1, path, candidates, out var altLine);
+                    path.RemoveAt(path.Count - 1);
+                    RestoreSnapshot(snap);
+                    if (alt > bestScore)
+                    {
+                        bestScore = alt;
+                        best = altLine;
+                    }
                 }
             }
         }

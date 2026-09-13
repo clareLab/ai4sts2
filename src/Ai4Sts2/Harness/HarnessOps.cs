@@ -76,6 +76,7 @@ public static class HarnessOps
             "wb.search" => Result(WorkbenchSearch(request.Args)),
             "wb.view" => Result(WorkbenchView(request.Args)),
             "wb.map" => Result(Session.Instance.Flow.MapSnapshot()),
+            "wb.tune" => Result(Tuning.Apply(request.Args)),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
             "wb.take" => Result(WorkbenchTake(request.Args)),
@@ -430,6 +431,7 @@ public static class HarnessOps
                 ? list.EnumerateArray().Select(o => o.GetString()).ToList()
                 : [a.GetProperty("option").GetString()];
         var ok = Session.Instance.Flow.Rest(options);
+        Session.Instance.Selector.Clear();
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
 
@@ -498,6 +500,7 @@ public static class HarnessOps
     {
         var a = args ?? throw new ArgumentException("args required");
         var ok = Session.Instance.Flow.RemoveCard(a.GetProperty("deck").GetInt32(), PlayerOf(a));
+        Session.Instance.Selector.Clear();
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
 

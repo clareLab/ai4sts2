@@ -5,7 +5,7 @@ import os
 import time
 
 from harness import Harness, HarnessError
-from pair import parse_config
+from pair import parse_config, split_tuning
 
 import metrics
 
@@ -88,7 +88,9 @@ def play(wb, case, config, max_turns):
         wb.call("potions.set", {"potions": [q for q in p["potions"] if q], "player": slot})
         wb.call("wb.sethp", {"hp": p["hp"], "maxHp": p["maxHp"], "player": slot})
     wb.call("wb.start", {**setup, "encounter": case["encounter"], "heal": False})
-    res = wb.call("wb.autoplay", {"maxTurns": max_turns, **config})
+    search, tune = split_tuning(config)
+    wb.call("wb.tune", tune)
+    res = wb.call("wb.autoplay", {"maxTurns": max_turns, **search})
     return {
         "won": res["won"],
         "hp": sum(p["creature"]["hp"] for p in res["state"]["players"]),

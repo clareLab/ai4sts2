@@ -19,6 +19,13 @@ public static class PowerWeights
             "THORNS" => (10, 10),
             "RINGING" => (25, 1),
             "PLOW" => (0, 0),
+            "PLATING" => (12, 20),
+            "DISINTEGRATION" => (75, 30),
+            "MIND_ROT" => (60, 3),
+            "WASTE_AWAY" => (150, 3),
+            "SLOTH" => (40, 3),
+            "STEAM_ERUPTION" => (10, 90),
+            "SANDPIT" => (0, 0),
             _ => enemy ? (0, 0) : (5, 10),
         };
     }

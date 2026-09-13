@@ -15,6 +15,12 @@ def parse_config(spec):
     return out
 
 
+def split_tuning(config):
+    search = {k: v for k, v in config.items() if not k.startswith("tune.")}
+    tune = {k[5:]: v for k, v in config.items() if k.startswith("tune.")}
+    return search, {"reset": True, **tune}
+
+
 def play(wb, a, seed, encounter, config, deck, potions):
     wb.call("wb.run", {"character": a.character, "seed": seed, "ascension": 0})
     if deck:
@@ -22,7 +28,9 @@ def play(wb, a, seed, encounter, config, deck, potions):
     if potions:
         wb.call("potions.set", {"potions": potions})
     wb.call("wb.start", {"character": a.character, "seed": seed, "encounter": encounter, "heal": True})
-    res = wb.call("wb.autoplay", {"maxTurns": a.max_turns, **config})
+    search, tune = split_tuning(config)
+    wb.call("wb.tune", tune)
+    res = wb.call("wb.autoplay", {"maxTurns": a.max_turns, **search})
     me = res["state"]["players"][0]
     return {
         "won": res["won"],
