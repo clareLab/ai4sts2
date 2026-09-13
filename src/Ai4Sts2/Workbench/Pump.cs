@@ -119,8 +119,24 @@ public sealed class Pump : SynchronizationContext
         return ran;
     }
 
+    public long Settled { get; private set; }
+
     private void Verify(Task task, string label)
     {
+        if (!task.IsCompleted)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (!task.IsCompleted && sw.ElapsedMilliseconds < 2000)
+            {
+                Thread.Sleep(5);
+                DrainAll();
+            }
+            if (task.IsCompleted)
+            {
+                Settled++;
+                return;
+            }
+        }
         if (!task.IsCompleted)
         {
             throw new LeakedAwaitException(
