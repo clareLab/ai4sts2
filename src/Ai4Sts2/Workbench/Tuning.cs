@@ -25,6 +25,16 @@ public static class Tuning
 
     public static int TotalFactor { get; set; } = 8;
 
+    public static int HorizonBlock { get; set; } = 80;
+
+    public static int ThreatMoves { get; set; } = 5;
+
+    public static int ReservePercent { get; set; } = 50;
+
+    public static int SpikePercent { get; set; } = 50;
+
+    public static int BlockPrior { get; set; } = 10;
+
     private static readonly Dictionary<string, object?> _defaults = Properties()
         .ToDictionary(p => p.Name, p => p.GetValue(null));
 

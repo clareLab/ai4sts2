@@ -3,12 +3,17 @@ using Ai4Sts2.Core;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Entities.Rngs;
+using MegaCrit.Sts2.Core.Hooks;
+using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
+using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
 using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.ValueProps;
 
 namespace Ai4Sts2.Workbench;
 
@@ -18,13 +23,20 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
 {
     private const int HpWeight = 15;
     private readonly Dictionary<uint, int> _rootEnemyMaxHp = [];
+    private readonly Dictionary<string, Threat> _threats = [];
     private readonly int _potionValue;
+    private readonly int _blockPotionValue;
+    private bool _atTurnStart;
+
+    private sealed record Threat(int[] Damage, double PerTurn, double HitsPerTurn, int MaxHit, int Moves);
 
     public CombatDomain(Session session)
     {
         Session = session;
         var (state, _) = Session.Current(0);
-        _potionValue = state.Encounter?.RoomType is RoomType.Elite or RoomType.Boss ? Tuning.PotionHoldHard : 260;
+        var hard = state.Encounter?.RoomType is RoomType.Elite or RoomType.Boss;
+        _potionValue = hard ? Tuning.PotionHoldHard : 260;
+        _blockPotionValue = _potionValue;
         foreach (var enemy in state.Enemies)
         {
             if (enemy.CombatId is { } id)
@@ -32,6 +44,135 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 _rootEnemyMaxHp[id] = enemy.MaxHp;
             }
         }
+        if (hard && state.Players.Count > 0)
+        {
+            var spike = 0;
+            foreach (var enemy in state.Enemies)
+            {
+                if (enemy.IsAlive && enemy.Monster is not null && enemy.MaxHp < 1_000_000)
+                {
+                    spike = Math.Max(spike, ThreatOf(enemy, state, state.Players[0]).MaxHit);
+                }
+            }
+            _blockPotionValue = Math.Max(_potionValue, HpWeight * Math.Min(12, spike - Tuning.BlockPrior));
+        }
+    }
+
+    private Threat ThreatOf(Creature enemy, CombatState state, Player player)
+    {
+        var monster = enemy.Monster!;
+        var sb = new StringBuilder(96).Append(enemy.CombatId).Append('|').Append(monster.NextMove.Id).Append('|');
+        Powers(sb, enemy);
+        sb.Append('|');
+        Powers(sb, player.Creature);
+        var key = sb.ToString();
+        if (_threats.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+        var targets = state.PlayerCreatures;
+        var damage = new int[Math.Max(2, Tuning.ThreatMoves)];
+        double hits = 0;
+        var moves = 0;
+        MonsterState? node = monster.NextMove;
+        using (Session.ActAs(player))
+        {
+            for (var guard = 0; node is not null && moves < damage.Length && guard < 16; guard++)
+            {
+                if (node is MoveState move)
+                {
+                    foreach (var intent in move.Intents)
+                    {
+                        if (intent is AttackIntent attack)
+                        {
+                            damage[moves] += attack.GetTotalDamage(targets, enemy);
+                            hits += Math.Max(1, attack.Repeats);
+                        }
+                    }
+                    moves++;
+                }
+                else if (node is RandomBranchState)
+                {
+                    break;
+                }
+                string next;
+                try
+                {
+                    next = node.GetNextState(enemy, null!);
+                }
+                catch (Exception e) when (e is InvalidOperationException or NullReferenceException or ArgumentException)
+                {
+                    break;
+                }
+                node =
+                    monster.MoveStateMachine is { } machine && machine.States.TryGetValue(next, out var s) ? s : null;
+            }
+        }
+        var mean = moves == 0 ? 0 : damage.Take(moves).Average();
+        for (var i = moves; i < damage.Length; i++)
+        {
+            damage[i] = (int)mean;
+        }
+        var threat = new Threat(damage, mean, moves == 0 ? 0 : hits / moves, damage.Max(), moves);
+        _threats[key] = threat;
+        return threat;
+    }
+
+    public double Horizon()
+    {
+        _atTurnStart = true;
+        try
+        {
+            return Estimate();
+        }
+        finally
+        {
+            _atTurnStart = false;
+        }
+    }
+
+    private static int ExpectedBlock(Player player)
+    {
+        if (player.PlayerCombatState is not { } pcs || Tuning.HorizonBlock <= 0)
+        {
+            return 0;
+        }
+        var creature = player.Creature;
+        var options = new List<(int Cost, int Block)>();
+        foreach (var card in pcs.Hand.Cards)
+        {
+            if (!card.GainsBlock || !card.DynamicVars.TryGetValue("Block", out var v) || !card.CanPlay(out _, out _))
+            {
+                continue;
+            }
+            var cost = card.EnergyCost.CostsX ? pcs.Energy : card.EnergyCost.GetWithModifiers(CostModifiers.Local);
+            var props = v is BlockVar bv ? bv.Props : ValueProp.Move;
+            var block = (int)Hook.ModifyBlock(card.CombatState!, creature, v.BaseValue, props, card, null, out _);
+            if (block > 0)
+            {
+                options.Add((cost, block));
+            }
+        }
+        var energy = pcs.Energy;
+        var total = 0;
+        foreach (
+            var (cost, block) in options.OrderByDescending(o =>
+                o.Cost == 0 ? double.MaxValue : o.Block / (double)o.Cost
+            )
+        )
+        {
+            if (cost > energy)
+            {
+                continue;
+            }
+            energy -= cost;
+            total += block;
+        }
+        if (player.Potions.Any(q => q.Id.Entry == "BLOCK_POTION"))
+        {
+            total += 12;
+        }
+        return total * Tuning.HorizonBlock / 100;
     }
 
     public Session Session { get; }
@@ -231,7 +372,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 continue;
             }
             score += PowerScore(creature, 1);
-            score += player.Potions.Count() * _potionValue;
+            score += player.Potions.Sum(q => q.Id.Entry == "BLOCK_POTION" ? _blockPotionValue : _potionValue);
             if (player.PlayerCombatState is { } pcs)
             {
                 score += pcs.Pets.Sum(pet => pet.CurrentHp * 3);
@@ -253,7 +394,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         var incoming = new int[state.Players.Count];
         foreach (var enemy in state.Enemies)
         {
-            if (!enemy.IsAlive || enemy.Monster?.NextMove is not { } move)
+            if (enemy.Monster?.NextMove is not { } move || (!enemy.IsAlive && enemy.MaxHp < 1_000_000))
             {
                 continue;
             }
@@ -283,12 +424,35 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             {
                 continue;
             }
-            var through = Math.Max(0, incoming[p] + SelfDamage(creature) - creature.Block - Plating(creature));
+            var anticipated = _atTurnStart ? ExpectedBlock(state.Players[p]) : 0;
+            var through = Math.Max(
+                0,
+                incoming[p] + SelfDamage(creature) - creature.Block - Plating(creature) - anticipated
+            );
             score -= through * HpWeight;
             if (through >= creature.CurrentHp)
             {
                 score -= 100_000 + (Tuning.GradedLethal ? 200 * (through - creature.CurrentHp) : 0);
             }
+            var hpAfter = creature.CurrentHp - through;
+            var following = 0;
+            var spike = 0;
+            foreach (var enemy in state.Enemies)
+            {
+                if (!enemy.IsAlive || enemy.Monster is null || enemy.MaxHp >= 1_000_000)
+                {
+                    continue;
+                }
+                var threat = ThreatOf(enemy, state, state.Players[p]);
+                following += threat.Damage[1];
+                for (var i = 1; i < threat.Damage.Length; i++)
+                {
+                    spike = Math.Max(spike, threat.Damage[i]);
+                }
+            }
+            var cover = Tuning.BlockPrior;
+            score -= HpWeight * Tuning.ReservePercent / 100.0 * Math.Max(0, following - cover - hpAfter);
+            score -= HpWeight * Tuning.SpikePercent / 100.0 * Math.Max(0, spike - cover - hpAfter);
         }
         return score;
     }

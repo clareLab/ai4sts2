@@ -40,6 +40,8 @@ public interface ISearchDomain<TAction>
     public double Evaluate();
 
     public double Estimate();
+
+    public double Horizon();
 }
 
 public sealed record BeamEntry<TAction>(
@@ -217,7 +219,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                     }
                     else if (turn >= options.Turns)
                     {
-                        real = Tuning.HorizonEstimate ? domain.Estimate() : real1;
+                        real = Tuning.HorizonEstimate ? domain.Horizon() : real1;
                     }
                     else
                     {
