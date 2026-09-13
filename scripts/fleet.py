@@ -2,6 +2,7 @@ import argparse
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -75,7 +76,7 @@ def worker(name, jobs, a, log_dir, results, lock):
         cmd = [
             sys.executable,
             "-u",
-            os.path.join(ROOT, "scripts", "run.py"),
+            os.path.join(log_dir, "run.py"),
             "--instance",
             name,
             "--character",
@@ -90,8 +91,9 @@ def worker(name, jobs, a, log_dir, results, lock):
         ]
         log_path = os.path.join(log_dir, f"{character}-{a.players}p-{seed}.log")
         t0 = time.time()
+        env = {**os.environ, "PYTHONPATH": os.path.join(ROOT, "scripts")}
         with open(log_path, "w", encoding="utf-8") as log:
-            proc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT, check=False)
+            proc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT, env=env, check=False)
         outcome = "?"
         with open(log_path, encoding="utf-8") as log:
             for line in log:
@@ -126,6 +128,7 @@ def main():
             jobs.put((character, seed))
     log_dir = os.path.join(BATCHES, a.tag)
     os.makedirs(log_dir, exist_ok=True)
+    shutil.copyfile(os.path.join(ROOT, "scripts", "run.py"), os.path.join(log_dir, "run.py"))
     print(f"fleet {a.tag}: {jobs.qsize()} jobs ({skipped} already recorded) on {a.instances}")
     results = []
     lock = threading.Lock()
