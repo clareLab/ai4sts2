@@ -96,6 +96,7 @@ public static class HarnessOps
             "wb.evalreward" => Result(WorkbenchEvalReward(request.Args)),
             "wb.evalsmith" => Result(WorkbenchEvalSmith(request.Args)),
             "wb.evalrest" => Result(WorkbenchEvalRest(request.Args)),
+            "wb.evalrelic" => Result(WorkbenchEvalRelic(request.Args)),
             "wb.evalpath" => Result(WorkbenchEvalPath(request.Args)),
             "wb.evalevent" => Result(WorkbenchEvalEvent(request.Args)),
             "wb.evalshop" => Result(WorkbenchEvalShop(request.Args)),
@@ -628,6 +629,27 @@ public static class HarnessOps
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var evaluation = Rollout.EvaluateEvent(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchEvalRelic(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var session = Session.Instance;
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not TreasureRoom)
+        {
+            throw new InvalidOperationException("not in a treasure room");
+        }
+        var relics = RunManager.Instance.TreasureRoomRelicSynchronizer.CurrentRelics?.ToList() ?? [];
+        var choices = new List<(string Label, int? Index, Action Apply)>();
+        for (var i = 0; i < relics.Count; i++)
+        {
+            var index = i;
+            var votes = Enumerable.Repeat<int?>(index, run.Players.Count).ToList();
+            choices.Add((relics[i].Id.Entry, index, new Action(() => session.Flow.PickRelics(votes))));
+        }
+        var evaluation = Rollout.EvaluateChoices(session, "relic", choices, SearchOptionsFrom(a), PlanFrom(a, true));
+        return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
     private static object WorkbenchEvalRest(JsonElement? args)

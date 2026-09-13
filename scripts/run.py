@@ -199,7 +199,14 @@ def handle_treasure(wb, a, entry):
     gold = wb.call("wb.chest")["micros"]
     v = wb.call("wb.view")["view"]
     relics = v["treasureRelics"]
-    votes = [i if i < len(relics) else None for i in range(a.players)]
+    pick = 0
+    if len(relics) > 1:
+        ev = wb.call("wb.evalrelic", plan_args(a))["evaluation"]
+        entry["evaluation"] = ev
+        best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+        if best is not None and best.get("index") is not None:
+            pick = best["index"]
+    votes = [pick if relics else None for _ in range(a.players)]
     res = wb.call("wb.relic", {"votes": votes})
     entry["treasure"] = {
         "gold": gold,

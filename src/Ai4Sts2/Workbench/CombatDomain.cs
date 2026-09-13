@@ -32,7 +32,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private readonly double _blockPerTurn;
     private readonly double _attacksPerTurn;
     private readonly double _skillsPerTurn;
-    private double _horizon;
+    private readonly double _horizon;
     private double _incomingPerTurn;
     private int _enemyBulk;
     private bool _atTurnStart;
@@ -72,6 +72,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         _blockPerTurn = fight.Turns > 0 ? (double)fight.Block / fight.Turns : Tuning.BlockPrior;
         _attacksPerTurn = fight.Turns > 0 ? Math.Max(1, (double)fight.Attacks / fight.Turns) : 2.5;
         _skillsPerTurn = fight.Turns > 0 ? Math.Max(0.5, (double)fight.Skills / fight.Turns) : 1.5;
+        var bulk = state.Enemies.Where(e => e.IsAlive && e.MaxHp < 1_000_000).Sum(e => e.CurrentHp + e.Block);
+        _horizon = Math.Clamp(bulk / _damagePerTurn, 1, Tuning.RateHorizon);
     }
 
     private double Race(CombatState state)
@@ -907,7 +909,6 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 _incomingPerTurn += threat.PerTurn;
             }
         }
-        _horizon = Math.Clamp(_enemyBulk / _damagePerTurn, 1, Tuning.RateHorizon);
     }
 
     private double? RatePrice(Creature creature, PowerModel power, int amount, int sign, CombatState state)
@@ -922,8 +923,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             return power switch
             {
                 StrengthPower => amount * hits * _horizon * HpWeight,
-                VulnerablePower => -0.5 * _damagePerTurn * turns * 10 * share,
-                WeakPower => -0.25 * threat.PerTurn * turns * HpWeight,
+                VulnerablePower when Tuning.RateDebuffs => -0.5 * _damagePerTurn * turns * 10 * share,
+                WeakPower when Tuning.RateDebuffs => -0.25 * threat.PerTurn * turns * HpWeight,
                 _ => null,
             };
         }
@@ -931,9 +932,9 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         {
             StrengthPower => amount * _attacksPerTurn * _horizon * 10,
             DexterityPower => amount * _skillsPerTurn * _horizon * HpWeight,
-            VulnerablePower => -0.5 * _incomingPerTurn * turns * HpWeight,
-            WeakPower => -0.25 * _damagePerTurn * turns * 10,
-            FrailPower => -0.25 * _blockPerTurn * turns * HpWeight,
+            VulnerablePower when Tuning.RateDebuffs => -0.5 * _incomingPerTurn * turns * HpWeight,
+            WeakPower when Tuning.RateDebuffs => -0.25 * _damagePerTurn * turns * 10,
+            FrailPower when Tuning.RateDebuffs => -0.25 * _blockPerTurn * turns * HpWeight,
             _ => null,
         };
     }

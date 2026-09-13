@@ -35,6 +35,8 @@ public static class Tuning
 
     public static bool RatePricing { get; set; }
 
+    public static bool RateDebuffs { get; set; }
+
     public static int RateHorizon { get; set; } = 6;
 
     public static bool FreezeMap { get; set; } = true;
