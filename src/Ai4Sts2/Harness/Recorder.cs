@@ -7,6 +7,7 @@ namespace Ai4Sts2.Harness;
 public static class Recorder
 {
     private static readonly Lock _gate = new();
+    private static readonly JsonSerializerOptions _line = new(HarnessJson.Options) { WriteIndented = false };
     private static string? _path;
     private static int _fight;
     private static int _depth;
@@ -82,7 +83,7 @@ public static class Recorder
                 _ = Directory.CreateDirectory(dir);
                 _path = Path.Combine(dir, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{System.Environment.ProcessId}.jsonl");
             }
-            File.AppendAllText(_path, JsonSerializer.Serialize(row, HarnessJson.Options) + "\n");
+            File.AppendAllText(_path, JsonSerializer.Serialize(row, _line) + "\n");
         }
     }
 }
