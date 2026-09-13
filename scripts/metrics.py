@@ -67,9 +67,9 @@ def record(kind, summary, detail=None, versions=None):
         "build": build_info(),
     }
     row.update(summary)
-    with open(run_path(run_id), "w", encoding="utf-8") as f:
+    with open(run_path(run_id), "w", encoding="utf-8", newline="\n") as f:
         json.dump({**row, "detail": detail}, f, ensure_ascii=False)
-    with open(INDEX_PATH, "a", encoding="utf-8") as f:
+    with open(INDEX_PATH, "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     refresh_report()
     return row
@@ -177,11 +177,11 @@ def migrate(rows):
         if kind == "diff":
             row["cases"] = [{k: v for k, v in c.items() if k != "detail"} for c in r.get("cases") or []]
             detail["cases"] = r.get("cases") or []
-        with open(run_path(run_id), "w", encoding="utf-8") as f:
+        with open(run_path(run_id), "w", encoding="utf-8", newline="\n") as f:
             json.dump({**row, "detail": detail or None}, f, ensure_ascii=False)
         out.append(row)
     tmp = INDEX_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         for row in out:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     os.replace(tmp, INDEX_PATH)
