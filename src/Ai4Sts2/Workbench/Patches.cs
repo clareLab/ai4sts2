@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.Saves.Managers;
 
 namespace Ai4Sts2.Workbench;
 
@@ -22,6 +23,27 @@ public static class Patches
     public static bool Applied => _harmony is not null;
 
     public static int Count { get; private set; }
+
+    private static Harmony? _headless;
+
+    public static void ApplyHeadless()
+    {
+        if (_headless is not null)
+        {
+            return;
+        }
+        var harmony = new Harmony(Entry.ModId + ".headless");
+        var target = typeof(ProgressSaveManager).GetMethod("SeenFtue", Any, [typeof(string)])!;
+        var prefix = typeof(Patches).GetMethod(nameof(SeenFtue), BindingFlags.Static | BindingFlags.NonPublic);
+        _ = harmony.Patch(target, prefix: new HarmonyMethod(prefix));
+        _headless = harmony;
+    }
+
+    private static bool SeenFtue(ref bool __result)
+    {
+        __result = true;
+        return false;
+    }
 
     public static void Apply()
     {

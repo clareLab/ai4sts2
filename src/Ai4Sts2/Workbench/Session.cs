@@ -325,8 +325,10 @@ public sealed class Session
         {
             return;
         }
+        var chain = string.Join(" | ", AwaitChain.Describe(CombatManager.Instance._turnLoopTask, 12));
+        Entry.Log.Error($"leaked await at {label}: {chain}");
         throw new LeakedAwaitException(
-            $"{label}: phase={pcs?.Phase} turn={pcs?.TurnNumber} after pump drained (posted={Pump.Posted}, drained={Pump.Drained})"
+            $"{label}: phase={pcs?.Phase} turn={pcs?.TurnNumber} after pump drained (posted={Pump.Posted}, drained={Pump.Drained}, foreign={Pump.Foreign}) awaits: {chain}"
         );
     }
 

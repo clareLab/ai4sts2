@@ -16,6 +16,11 @@ public static class AwaitChain
         while (current is not null && lines.Count < limit && seen.Add(current))
         {
             lines.Add($"{current.GetType().Name} status={current.Status} id={current.Id}");
+            if (current.Exception?.InnerException is { } fault)
+            {
+                var text = fault.ToString().ReplaceLineEndings(" ");
+                lines.Add("  fault: " + text[..Math.Min(1500, text.Length)]);
+            }
             var machine = StateMachineOf(current);
             if (machine is null)
             {

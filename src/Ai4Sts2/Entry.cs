@@ -17,6 +17,10 @@ public static class Entry
 
     public static void Initialize()
     {
+        if (HarnessHost.Enabled)
+        {
+            Patches.ApplyHeadless();
+        }
         if (Switches.Requested)
         {
             Switches.ApplyEarly(1);
