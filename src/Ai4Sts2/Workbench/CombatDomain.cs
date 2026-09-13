@@ -26,8 +26,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private readonly Dictionary<string, Threat> _threats = [];
     private readonly int _potionValue;
     private readonly int _blockPotionValue;
-    private readonly int[] _selfDamage;
-    private readonly int[] _plating;
+    private readonly Dictionary<string, (int[] Self, int[] Plating)> _probes = [];
+    private readonly bool _probe;
     private bool _atTurnStart;
 
     private sealed record Threat(int[] Damage, double PerTurn, double HitsPerTurn, int MaxHit, int Moves);
@@ -58,17 +58,52 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             }
             _blockPotionValue = Math.Max(_potionValue, HpWeight * Math.Min(12, spike - Tuning.BlockPrior));
         }
-        _selfDamage = new int[state.Players.Count];
-        _plating = new int[state.Players.Count];
-        if (probe && Tuning.ProbeTurnEnd && CombatManager.Instance.IsInProgress && !Terminal)
-        {
-            ProbeTurnEnd(state);
-        }
+        _probe = probe && Tuning.ProbeTurnEnd;
     }
 
-    private void ProbeTurnEnd(CombatState state)
+    private static string DebuffSignature(CombatState state)
+    {
+        var sb = new StringBuilder();
+        foreach (var player in state.Players)
+        {
+            foreach (var power in player.Creature.Powers)
+            {
+                if (power.Amount > 0 && power.GetTypeForAmount(power.Amount) == PowerType.Debuff)
+                {
+                    sb.Append(power.Id.Entry).Append('=').Append(power.Amount).Append(',');
+                }
+                else if (power.Amount > 0 && power.Id.Entry.Contains("PLATING", StringComparison.Ordinal))
+                {
+                    sb.Append(power.Id.Entry).Append('=').Append(power.Amount).Append(',');
+                }
+            }
+            sb.Append('|');
+        }
+        return sb.ToString();
+    }
+
+    private (int[] Self, int[] Plating) ProbeFor(CombatState state)
+    {
+        var zero = (new int[state.Players.Count], new int[state.Players.Count]);
+        if (!_probe || Terminal || !CombatManager.Instance.IsInProgress)
+        {
+            return zero;
+        }
+        var signature = DebuffSignature(state);
+        if (_probes.TryGetValue(signature, out var known))
+        {
+            return known;
+        }
+        var measured = _probes.Count < 64 ? ProbeTurnEnd(state) : zero;
+        _probes[signature] = measured;
+        return measured;
+    }
+
+    private (int[] Self, int[] Plating) ProbeTurnEnd(CombatState state)
     {
         var players = state.Players.ToList();
+        var self = new int[players.Count];
+        var plating = new int[players.Count];
         var attack = new int[players.Count];
         var targets = state.PlayerCreatures;
         foreach (var enemy in state.Enemies)
@@ -99,7 +134,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         {
             if (players[p].Creature.IsAlive && attack[p] + 5 >= before[p] + block[p])
             {
-                return;
+                return (self, plating);
             }
         }
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -124,8 +159,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 }
                 var blockable = plain[p] - shielded[p];
                 var extra = blockable - Math.Max(0, attack[p] - block[p]);
-                _selfDamage[p] = Math.Max(0, extra) + shielded[p];
-                _plating[p] = Math.Max(0, -extra);
+                self[p] = Math.Max(0, extra) + shielded[p];
+                plating[p] = Math.Max(0, -extra);
             }
         }
         catch (Exception e) when (e is LeakedAwaitException or InvalidOperationException)
@@ -139,6 +174,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             ProbeMicros += sw.Elapsed.TotalMicroseconds;
             Probes++;
         }
+        return (self, plating);
     }
 
     public static double ProbeMicros { get; private set; }
@@ -319,6 +355,17 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                         }
                     }
                 }
+                else if (card.TargetType is TargetType.AnyPlayer or TargetType.AnyAlly)
+                {
+                    for (var k = 0; k < state.Players.Count; k++)
+                    {
+                        var ally = state.Players[k].Creature;
+                        if (ally.IsAlive && card.IsValidTarget(ally))
+                        {
+                            list.Add(new SearchAction("play", p, h, -(k + 1), card.Id.Entry));
+                        }
+                    }
+                }
                 else if (card.IsValidTarget(null))
                 {
                     list.Add(new SearchAction("play", p, h, null, card.Id.Entry));
@@ -339,6 +386,17 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                         if (potion.IsValidTarget(e))
                         {
                             list.Add(new SearchAction("potion", p, slot, i, potion.Id.Entry));
+                        }
+                    }
+                }
+                else if (potion.TargetType is TargetType.AnyPlayer or TargetType.AnyAlly)
+                {
+                    for (var k = 0; k < state.Players.Count; k++)
+                    {
+                        var ally = state.Players[k].Creature;
+                        if (ally.IsAlive && potion.IsValidTarget(ally))
+                        {
+                            list.Add(new SearchAction("potion", p, slot, -(k + 1), potion.Id.Entry));
                         }
                     }
                 }
@@ -519,6 +577,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 }
             }
         }
+        var (Self, Plating) = ProbeFor(state);
         for (var p = 0; p < state.Players.Count; p++)
         {
             var creature = state.Players[p].Creature;
@@ -527,7 +586,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 continue;
             }
             var anticipated = _atTurnStart ? ExpectedBlock(state.Players[p]) : 0;
-            var through = Math.Max(0, incoming[p] + _selfDamage[p] - creature.Block - _plating[p] - anticipated);
+            var through = Math.Max(0, incoming[p] + Self[p] - creature.Block - Plating[p] - anticipated);
             score -= through * HpWeight;
             if (through >= creature.CurrentHp)
             {

@@ -248,7 +248,7 @@ public static class HarnessOps
         Creature? target = null;
         if (a.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.Number)
         {
-            target = state.Enemies[t.GetInt32()];
+            target = Session.Target(state, t.GetInt32());
         }
         if (target is not null && !card.IsValidTarget(target))
         {

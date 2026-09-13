@@ -189,7 +189,7 @@ public sealed class Session
         var (state, player) = Current(playerIndex);
         using var scope = ActAs(player);
         var card = player.PlayerCombatState!.Hand.Cards[handIndex];
-        var target = enemyIndex is { } i ? state.Enemies[i] : null;
+        var target = Target(state, enemyIndex);
         if (target is not null && !card.IsValidTarget(target))
         {
             target = null;
@@ -232,12 +232,20 @@ public sealed class Session
         return usable ? potion : null;
     }
 
+    public static Creature? Target(CombatState state, int? index) =>
+        index switch
+        {
+            null => null,
+            < 0 when -index.Value - 1 < state.Players.Count => state.Players[-index.Value - 1].Creature,
+            >= 0 when index.Value < state.Enemies.Count => state.Enemies[index.Value],
+            _ => null,
+        };
+
     public static Creature? PotionTarget(PotionModel potion, CombatState state, int? enemyIndex)
     {
         return !potion.TargetType.IsSingleTarget() ? null
-            : potion.TargetType == TargetType.AnyEnemy
-                ? enemyIndex is { } i && i < state.Enemies.Count ? state.Enemies[i]
-                    : null
+            : potion.TargetType is TargetType.AnyEnemy or TargetType.AnyPlayer or TargetType.AnyAlly
+                ? Target(state, enemyIndex) ?? (potion.TargetType == TargetType.AnyEnemy ? null : potion.Owner.Creature)
             : potion.Owner.Creature;
     }
 
