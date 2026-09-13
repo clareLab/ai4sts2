@@ -4,6 +4,16 @@ using MegaCrit.Sts2.Core.Rooms;
 
 namespace Ai4Sts2.Workbench;
 
+public sealed record TurnTrace(
+    int Turn,
+    IReadOnlyList<int> PlayerHp,
+    IReadOnlyList<int> EnemyHp,
+    IReadOnlyList<SearchAction> Line,
+    double Score,
+    int Nodes,
+    double Micros
+);
+
 public sealed record FightSummary(
     string Encounter,
     bool Won,
@@ -31,7 +41,8 @@ public static class Rollout
     public static (bool Won, int Turns, int Nodes, double Micros) PlayCombat(
         Session session,
         SearchOptions options,
-        int maxTurns
+        int maxTurns,
+        List<TurnTrace>? trace = null
     )
     {
         var sw = Stopwatch.StartNew();
@@ -42,6 +53,21 @@ public static class Rollout
             var result = new Search<SearchAction>(new CombatDomain(session), options).Run();
             nodes += result.Nodes;
             var line = result.Line.Count > 0 ? result.Line : [new SearchAction("end", 0, -1, null, null)];
+            if (trace is not null)
+            {
+                var (state, player) = Session.Current(0);
+                trace.Add(
+                    new TurnTrace(
+                        player.PlayerCombatState?.TurnNumber ?? turns + 1,
+                        state.Players.Select(p => p.Creature.CurrentHp).ToList(),
+                        state.Enemies.Select(e => e.CurrentHp).ToList(),
+                        line,
+                        result.Score,
+                        result.Nodes,
+                        result.Micros
+                    )
+                );
+            }
             foreach (var action in line)
             {
                 if (!CombatManager.Instance.IsInProgress)

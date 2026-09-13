@@ -2,6 +2,7 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.CardRewardAlternatives;
+using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Rewards;
@@ -25,6 +26,10 @@ public sealed record RewardView(
 
 public sealed record RewardsView(int Player, int Id, bool Completed, IReadOnlyList<RewardView> Rewards);
 
+public sealed record EventOptionView(int Index, string Key, bool Locked, bool Proceed, bool Chosen, string? Relic);
+
+public sealed record ShopEntryView(int Index, string Kind, string? Id, int Cost, bool Stocked, bool Affordable);
+
 public sealed record RunView(
     int Act,
     int Floor,
@@ -36,12 +41,20 @@ public sealed record RunView(
     MapCoord? Coord,
     IReadOnlyList<MapChoice> Choices,
     IReadOnlyList<RewardsView> Rewards,
-    IReadOnlyList<string> RestOptions
+    IReadOnlyList<string> RestOptions,
+    string? Event,
+    bool EventFinished,
+    IReadOnlyList<EventOptionView> EventOptions,
+    IReadOnlyList<string> TreasureRelics,
+    IReadOnlyList<ShopEntryView> Shop,
+    bool GameOver,
+    bool LastAct
 );
 
 public sealed class RunFlow(Session session)
 {
     private readonly List<(RewardsSet Set, Task Done)> _offered = [];
+    private TreasureRoom? _openedChest;
 
     public void Begin()
     {
@@ -79,6 +92,20 @@ public sealed class RunFlow(Session session)
             ))
             .ToList();
         var rest = room is RestSiteRoom site ? site.Options.Select(o => o.OptionId).ToList() : [];
+        var evt = room is EventRoom eventRoom ? eventRoom.LocalMutableEvent : null;
+        var options = evt is null
+            ? []
+            : evt
+                .CurrentOptions.Select(
+                    (o, i) => new EventOptionView(i, o.TextKey, o.IsLocked, o.IsProceed, o.WasChosen, o.Relic?.Id.Entry)
+                )
+                .ToList();
+        var relics =
+            room is TreasureRoom
+                ? RunManager.Instance.TreasureRoomRelicSynchronizer.CurrentRelics?.Select(r => r.Id.Entry).ToList()
+                    ?? []
+                : [];
+        var shop = room is MerchantRoom merchant ? ShopEntries(merchant) : [];
         return new RunView(
             run.CurrentActIndex,
             run.TotalFloor,
@@ -90,8 +117,160 @@ public sealed class RunFlow(Session session)
             run.CurrentMapCoord,
             choices,
             rewards,
-            rest
+            rest,
+            evt?.Id.Entry,
+            evt?.IsFinished ?? false,
+            options,
+            relics,
+            shop,
+            run.IsGameOver,
+            run.CurrentActIndex >= run.Acts.Count - 1
         );
+    }
+
+    private static List<ShopEntryView> ShopEntries(MerchantRoom merchant)
+    {
+        var inventory = merchant.GetLocalInventory();
+        var list = new List<ShopEntryView>();
+        foreach (var entry in inventory.AllEntries)
+        {
+            var (kind, id) = entry switch
+            {
+                MerchantCardEntry card => ("card", card.CreationResult?.Card.Id.Entry),
+                MerchantRelicEntry relic => ("relic", relic.Model?.Id.Entry),
+                MerchantPotionEntry potion => ("potion", potion.Model?.Id.Entry),
+                MerchantCardRemovalEntry => ("removal", null),
+                _ => (entry.GetType().Name, null),
+            };
+            list.Add(new ShopEntryView(list.Count, kind, id, entry.Cost, entry.IsStocked, entry.EnoughGold));
+        }
+        return list;
+    }
+
+    public void ChooseEvent(int index)
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not EventRoom room)
+        {
+            throw new InvalidOperationException("not in an event");
+        }
+        var option = room.LocalMutableEvent.CurrentOptions[index];
+        if (option.IsLocked || option.IsProceed)
+        {
+            throw new ArgumentException($"event option {index} ({option.TextKey}) cannot be chosen headlessly");
+        }
+        var sync = RunManager.Instance.EventSynchronizer;
+        session.DropSnapshots();
+        session.Pump.Drive(
+            async () =>
+            {
+                sync.ChooseLocalOption(index);
+                await sync.AwaitPendingOptionTasks();
+            },
+            $"event option {index}"
+        );
+        if (CombatManager.Instance.IsInProgress)
+        {
+            session.RequirePlayable(-1, "event combat");
+        }
+    }
+
+    public void Proceed()
+    {
+        session.Pump.Drive(RunManager.Instance.ProceedFromTerminalRewardsScreen, "proceed");
+        _offered.Clear();
+    }
+
+    public int OpenChest()
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not TreasureRoom room)
+        {
+            throw new InvalidOperationException("not in a treasure room");
+        }
+        if (_openedChest == room)
+        {
+            return 0;
+        }
+        var gold = 0;
+        session.Pump.Drive(
+            async () =>
+            {
+                gold = await room.DoNormalRewards();
+                await room.DoExtraRewardsIfNeeded();
+            },
+            "open chest"
+        );
+        _openedChest = room;
+        return gold;
+    }
+
+    public string? PickRelic(int? index)
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not TreasureRoom)
+        {
+            throw new InvalidOperationException("not in a treasure room");
+        }
+        var sync = RunManager.Instance.TreasureRoomRelicSynchronizer;
+        var relics = sync.CurrentRelics ?? throw new InvalidOperationException("no relics offered");
+        string? picked = null;
+        if (index is { } i)
+        {
+            var relic = relics[i];
+            var player = LocalContext.GetMe(run)!;
+            session.Pump.Drive(() => RelicCmd.Obtain(relic.ToMutable(), player), $"obtain {relic.Id.Entry}");
+            picked = relic.Id.Entry;
+        }
+        session.Pump.Run(sync.SkipRelicLocally);
+        return picked;
+    }
+
+    public bool Buy(int index)
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not MerchantRoom merchant)
+        {
+            throw new InvalidOperationException("not in a shop");
+        }
+        var inventory = merchant.GetLocalInventory();
+        var entry = inventory.AllEntries.ElementAt(index);
+        var ok = false;
+        session.Pump.Drive(async () => ok = await entry.OnTryPurchaseWrapper(inventory), $"buy {index}");
+        return ok;
+    }
+
+    public bool RemoveCard(int deckIndex)
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not MerchantRoom merchant)
+        {
+            throw new InvalidOperationException("not in a shop");
+        }
+        var inventory = merchant.GetLocalInventory();
+        var entry = inventory.CardRemovalEntry ?? throw new InvalidOperationException("no removal entry");
+        session.Selector.Enqueue(deckIndex);
+        var ok = false;
+        session.Pump.Drive(async () => ok = await entry.OnTryPurchaseWrapper(inventory, false, false), "remove card");
+        if (ok)
+        {
+            entry.SetUsed();
+        }
+        return ok;
+    }
+
+    public void NextAct()
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentActIndex >= run.Acts.Count - 1)
+        {
+            throw new InvalidOperationException("last act: no next act to enter");
+        }
+        _offered.Clear();
+        _openedChest = null;
+        session.DropSnapshots();
+        run.ActFloor++;
+        session.Pump.Drive(RunManager.Instance.EnterNextAct, "next act");
     }
 
     public void Travel(int col, int row)

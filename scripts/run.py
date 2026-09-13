@@ -5,7 +5,7 @@ from harness import Harness, HarnessError
 
 import metrics
 
-PREFERENCE = ["Monster", "Unknown", "RestSite", "Elite", "Shop", "Treasure", "Boss"]
+PREFERENCE = ["Boss", "Monster", "Unknown", "RestSite", "Elite", "Shop", "Treasure"]
 
 
 def choose_point(view, hp, max_hp, floor):
@@ -25,6 +25,81 @@ def choose_point(view, hp, max_hp, floor):
             if c["type"] == kind:
                 return c
     return choices[0]
+
+
+def autoplay(wb, a):
+    return wb.call(
+        "wb.autoplay",
+        {
+            "maxTurns": a.max_turns,
+            "maxNodes": a.max_nodes,
+            "maxDepth": a.max_depth,
+            "leaf": "estimate",
+            "beam": a.beam,
+            "turns": a.turns,
+        },
+    )
+
+
+def combat_entry(entry, auto):
+    entry["combat"] = {
+        "won": auto["won"],
+        "turns": auto["turns"],
+        "nodes": auto["nodes"],
+        "millis": round(auto["micros"] / 1000, 1),
+        "enemies": [e["name"] for e in auto["state"]["enemies"]],
+        "trace": auto.get("trace", []),
+    }
+    return auto["won"]
+
+
+def handle_event(wb, a, entry):
+    chosen = []
+    for _ in range(6):
+        v = wb.call("wb.view")["view"]
+        if v["room"] != "EventRoom" or v["eventFinished"]:
+            break
+        options = [o for o in v["eventOptions"] if not o["locked"] and not o["proceed"] and not o["chosen"]]
+        if not options:
+            break
+        pick = options[0]
+        res = wb.call("wb.event", {"index": pick["index"]})
+        chosen.append(pick["key"])
+        if res["view"]["inCombat"]:
+            auto = autoplay(wb, a)
+            won = combat_entry(entry, auto)
+            if not won:
+                entry["event"] = {"id": v["event"], "chosen": chosen}
+                return False
+            take_rewards(wb, a, entry)
+            wb.call("wb.proceed")
+    entry["event"] = {"id": entry.get("model"), "chosen": chosen}
+    return True
+
+
+def handle_treasure(wb, entry):
+    gold = wb.call("wb.chest")["micros"]
+    v = wb.call("wb.view")["view"]
+    relics = v["treasureRelics"]
+    res = wb.call("wb.relic", {"index": 0} if relics else {})
+    entry["treasure"] = {"gold": gold, "offered": relics, "picked": res.get("picked")}
+
+
+def handle_shop(wb, a, entry):
+    v = wb.call("wb.view")["view"]
+    bought = []
+    removal = next((e for e in v["shop"] if e["kind"] == "removal" and e["stocked"] and e["affordable"]), None)
+    if removal is not None:
+        deck = wb.call("run.state")["players"][0]["deck"]
+        idx = next((i for i, c in enumerate(deck) if c["id"] == "STRIKE_IRONCLAD" and not c.get("upgrade")), None)
+        if idx is not None and wb.call("wb.remove", {"deck": idx})["ok"]:
+            bought.append({"kind": "removal", "card": deck[idx]["id"], "cost": removal["cost"]})
+    for e in sorted((e for e in v["shop"] if e["kind"] == "potion" and e["stocked"]), key=lambda e: e["cost"]):
+        state = wb.call("run.state")["players"][0]
+        affordable = e["cost"] <= state["gold"] and any(p is None for p in state["potions"])
+        if affordable and wb.call("wb.buy", {"index": e["index"]})["ok"]:
+            bought.append({"kind": "potion", "id": e.get("id"), "cost": e["cost"]})
+    entry["shop"] = {"bought": bought, "offered": [(e["kind"], e.get("id"), e["cost"]) for e in v["shop"]]}
 
 
 def take_rewards(wb, a, entry):
@@ -79,7 +154,7 @@ def play_run(wb, a, seed):
         me = state["players"][0]
         choice = choose_point(view, me["hp"], me["maxHp"], view["floor"])
         if choice is None:
-            outcome = "act-cleared" if view["room"] == "CombatRoom" and view["combatFinished"] else "stuck"
+            outcome = "stuck"
             break
         t1 = time.time()
         res = wb.call("wb.travel", {"col": choice["col"], "row": choice["row"]})
@@ -94,32 +169,24 @@ def play_run(wb, a, seed):
             "hpBefore": me["hp"],
             "choices": view["choices"],
         }
+        alive = True
         if v["inCombat"]:
-            auto = wb.call(
-                "wb.autoplay",
-                {
-                    "maxTurns": a.max_turns,
-                    "maxNodes": a.max_nodes,
-                    "maxDepth": a.max_depth,
-                    "leaf": "estimate",
-                    "beam": a.beam,
-                    "turns": a.turns,
-                },
-            )
-            entry["combat"] = {
-                "won": auto["won"],
-                "turns": auto["turns"],
-                "nodes": auto["nodes"],
-                "millis": round(auto["micros"] / 1000, 1),
-                "enemies": [e["name"] for e in auto["state"]["enemies"]],
-            }
-            if not auto["won"]:
-                entry["hpAfter"] = 0
-                entry["wallSeconds"] = round(time.time() - t1, 3)
-                floors.append(entry)
-                outcome = "died"
-                break
-            take_rewards(wb, a, entry)
+            alive = combat_entry(entry, autoplay(wb, a))
+            if alive:
+                take_rewards(wb, a, entry)
+                if choice["type"] == "Boss":
+                    after_boss = wb.call("wb.view")["view"]
+                    if after_boss["lastAct"]:
+                        outcome = "act-cleared"
+                    else:
+                        wb.call("wb.nextact")
+                        entry["nextAct"] = True
+        elif v["room"] == "EventRoom":
+            alive = handle_event(wb, a, entry)
+        elif v["room"] == "TreasureRoom":
+            handle_treasure(wb, entry)
+        elif v["room"] == "MerchantRoom":
+            handle_shop(wb, a, entry)
         elif v["restOptions"]:
             wanted = "HEAL" if me["hp"] < me["maxHp"] * 0.6 else "SMITH"
             option = next((o for o in v["restOptions"] if o.upper() == wanted), v["restOptions"][0])
@@ -131,6 +198,10 @@ def play_run(wb, a, seed):
         entry["gold"] = after["gold"]
         entry["wallSeconds"] = round(time.time() - t1, 3)
         floors.append(entry)
+        if not alive:
+            outcome = "died"
+            print(f"  floor {entry['floor']:>2} {choice['type']:<8} {entry.get('model') or entry['room']:<28} died")
+            break
         print(
             f"  floor {entry['floor']:>2} {choice['type']:<8} {entry.get('model') or entry['room']:<28} hp {entry['hpBefore']:>3} -> {entry['hpAfter']:>3}"
             + (
@@ -140,7 +211,12 @@ def play_run(wb, a, seed):
             )
             + (f"  took {[t.get('card') or t.get('value') for t in entry['taken']]}" if entry.get("taken") else "")
             + (f"  rest {entry['rest']['option']}" if entry.get("rest") else "")
+            + (f"  event {entry['event']['chosen']}" if entry.get("event") else "")
+            + (f"  relic {entry['treasure']['picked']}" if entry.get("treasure") else "")
+            + (f"  shop {[b.get('id') or b.get('card') for b in entry['shop']['bought']]}" if entry.get("shop") else "")
         )
+        if outcome == "act-cleared":
+            break
     final = wb.call("run.state")
     me = final["players"][0]
     summary = {

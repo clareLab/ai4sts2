@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 
 namespace Ai4Sts2.Workbench;
@@ -37,6 +38,7 @@ public static class Patches
         );
         Prefix(harmony, typeof(SaveManager), "SaveRun", [typeof(AbstractRoom), typeof(bool)], nameof(SkipTask));
         Prefix(harmony, typeof(SaveManager), "SaveProgressFile", [], nameof(SkipVoid));
+        Prefix(harmony, typeof(RunManager), "OnEnded", [typeof(bool)], nameof(SkipRunEnded));
         Prefix(harmony, typeof(CombatState), "get_Creatures", [], nameof(Creatures));
         Prefix(harmony, typeof(CombatState), "get_PlayerCreatures", [], nameof(PlayerCreatures));
         Prefix(harmony, typeof(CombatState), "get_Players", [], nameof(Players));
@@ -125,6 +127,12 @@ public static class Patches
     {
         amount = 0;
         __result = false;
+        return !Switches.Applied;
+    }
+
+    private static bool SkipRunEnded(ref SerializableRun __result)
+    {
+        __result = null!;
         return !Switches.Applied;
     }
 

@@ -74,6 +74,13 @@ public static class HarnessOps
             "wb.take" => Result(WorkbenchTake(request.Args)),
             "wb.skip" => Result(WorkbenchSkip()),
             "wb.rest" => Result(WorkbenchRest(request.Args)),
+            "wb.event" => Result(WorkbenchEvent(request.Args)),
+            "wb.proceed" => Result(WorkbenchProceed()),
+            "wb.chest" => Result(WorkbenchChest()),
+            "wb.relic" => Result(WorkbenchRelic(request.Args)),
+            "wb.buy" => Result(WorkbenchBuy(request.Args)),
+            "wb.remove" => Result(WorkbenchRemove(request.Args)),
+            "wb.nextact" => Result(WorkbenchNextAct()),
             "wb.evalreward" => Result(WorkbenchEvalReward(request.Args)),
             "wb.autoplay" => Result(WorkbenchAutoplay(request.Args)),
             _ => throw new NotSupportedException($"unknown op '{request.Op}'"),
@@ -387,6 +394,60 @@ public static class HarnessOps
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
 
+    private static object WorkbenchEvent(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        Session.Instance.Flow.ChooseEvent(a.GetProperty("index").GetInt32());
+        return Flow(Session.Instance.Flow.View());
+    }
+
+    private static object WorkbenchProceed()
+    {
+        Session.Instance.Flow.Proceed();
+        return Flow(Session.Instance.Flow.View());
+    }
+
+    private static object WorkbenchChest()
+    {
+        var gold = Session.Instance.Flow.OpenChest();
+        return Flow(Session.Instance.Flow.View(), gold);
+    }
+
+    private static object WorkbenchRelic(JsonElement? args)
+    {
+        int? index =
+            args is { } a && a.TryGetProperty("index", out var i) && i.ValueKind == JsonValueKind.Number
+                ? i.GetInt32()
+                : null;
+        var picked = Session.Instance.Flow.PickRelic(index);
+        return new
+        {
+            Picked = picked,
+            View = Session.Instance.Flow.View(),
+            Run = RunSetup.Capture(Session.Instance.Run!),
+        };
+    }
+
+    private static object WorkbenchBuy(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var ok = Session.Instance.Flow.Buy(a.GetProperty("index").GetInt32());
+        return Flow(Session.Instance.Flow.View(), null, ok);
+    }
+
+    private static object WorkbenchRemove(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var ok = Session.Instance.Flow.RemoveCard(a.GetProperty("deck").GetInt32());
+        return Flow(Session.Instance.Flow.View(), null, ok);
+    }
+
+    private static object WorkbenchNextAct()
+    {
+        Session.Instance.Flow.NextAct();
+        return Flow(Session.Instance.Flow.View());
+    }
+
     private static SearchOptions SearchOptionsFrom(JsonElement a, int defaultNodes = 2000)
     {
         var maxNodes = a.TryGetProperty("maxNodes", out var n) ? n.GetInt32() : defaultNodes;
@@ -419,13 +480,15 @@ public static class HarnessOps
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var options =
             a.ValueKind == JsonValueKind.Object ? SearchOptionsFrom(a) : new SearchOptions(2000, 8, true, 3, 1);
-        var (won, turns, nodes, micros) = Rollout.PlayCombat(Session.Instance, options, maxTurns);
+        var trace = new List<TurnTrace>();
+        var (won, turns, nodes, micros) = Rollout.PlayCombat(Session.Instance, options, maxTurns, trace);
         return new
         {
             Won = won,
             Turns = turns,
             Nodes = nodes,
             Micros = micros,
+            Trace = trace,
             State = CombatDump.Capture(),
             View = Session.Instance.Flow.View(),
         };
