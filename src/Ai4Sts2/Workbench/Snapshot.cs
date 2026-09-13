@@ -13,7 +13,21 @@ public sealed class Snapshot
         Reference,
     }
 
-    private static readonly Dictionary<Type, (Shape Shape, Layout? Layout)> _shapes = [];
+    private static readonly Dictionary<Type, (Shape Shape, Layout? Layout)>[] _shapeCaches =
+    [
+        [],
+        [],
+    ];
+
+    [field: ThreadStatic]
+    public static bool Frozen { get; set; }
+
+    private static Dictionary<Type, (Shape Shape, Layout? Layout)> _shapes => _shapeCaches[Frozen ? 1 : 0];
+
+    private static bool FrozenType(Type t) =>
+        t == typeof(MegaCrit.Sts2.Core.Map.MapPoint)
+        || typeof(MegaCrit.Sts2.Core.Map.ActMap).IsAssignableFrom(t)
+        || t == typeof(MegaCrit.Sts2.Core.Runs.History.MapPointHistoryEntry);
 
     [ThreadStatic]
     private static HashSet<object>? _seen;
@@ -236,7 +250,8 @@ public sealed class Snapshot
         }
         var shape =
             IsSource(t) ? Shape.Source
-            : t == typeof(string) || typeof(Delegate).IsAssignableFrom(t) || Skip(t) ? Shape.Leaf
+            : t == typeof(string) || typeof(Delegate).IsAssignableFrom(t) || Skip(t) || (Frozen && FrozenType(t))
+                ? Shape.Leaf
             : typeof(AbstractModel).IsAssignableFrom(t) ? Shape.Model
             : Shape.Reference;
         entry = (shape, shape is Shape.Leaf or Shape.Source || t.IsArray ? null : Layout.For(t));

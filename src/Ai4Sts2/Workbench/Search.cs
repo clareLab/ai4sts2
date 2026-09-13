@@ -103,10 +103,22 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
     {
         _clock.Restart();
         _totalBudget = options.TotalBudget;
-        var root = TakeSnapshot();
-        var (score, line, estimated, beam) = Solve(1, root);
-        RestoreSnapshot(root);
-        root.Release();
+        var frozen = Snapshot.Frozen;
+        Snapshot.Frozen = Tuning.FreezeMap;
+        Snapshot root;
+        (double score, IReadOnlyList<TAction> line, double estimated, IReadOnlyList<BeamEntry<TAction>> beam) result;
+        try
+        {
+            root = TakeSnapshot();
+            result = Solve(1, root);
+            RestoreSnapshot(root);
+            root.Release();
+        }
+        finally
+        {
+            Snapshot.Frozen = frozen;
+        }
+        var (score, line, estimated, beam) = result;
         return new SearchResult<TAction>(
             score,
             estimated,
