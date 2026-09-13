@@ -374,7 +374,8 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         var run = RunManager.Instance.State ?? throw new InvalidOperationException("no run");
         var cards = a.GetProperty("cards").EnumerateArray().Select(c => c.GetString()!).ToList();
-        await RunSetup.SetDeckAsync(LocalContext.GetMe(run)!, cards);
+        var player = a.TryGetProperty("player", out var p) ? run.Players[p.GetInt32()] : LocalContext.GetMe(run)!;
+        await RunSetup.SetDeckAsync(player, cards);
         return Json(RunSetup.Capture(run));
     }
 

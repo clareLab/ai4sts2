@@ -15,7 +15,7 @@ def collect(paths, kinds, max_cases):
     for path in paths:
         with open(path, encoding="utf-8") as f:
             run = json.load(f)
-        if run.get("kind") != "run" or run.get("players", 1) != 1:
+        if run.get("kind") != "run":
             continue
         detail = run.get("detail") or run
         for case in detail.get("cases", []):
@@ -50,12 +50,24 @@ def collect(paths, kinds, max_cases):
                         "floor": fl["floor"],
                         "type": fl["type"],
                         "encounter": fl["model"],
+                        "net": run.get("net"),
+                        "party": [
+                            {
+                                "character": p["character"],
+                                "hp": p["hp"],
+                                "maxHp": p["maxHp"],
+                                "deck": [
+                                    f"{c['id']}+{c['upgrade']}" if c.get("upgrade") else c["id"] for c in p["deck"]
+                                ],
+                                "relics": [r if isinstance(r, str) else r["id"] for r in p["relics"]],
+                                "potions": [q if q is None or isinstance(q, str) else q["id"] for q in p["potions"]],
+                            }
+                            for p in party
+                        ],
                         "character": me["character"],
-                        "hp": me["hp"],
-                        "maxHp": me["maxHp"],
+                        "hp": sum(p["hp"] for p in party),
+                        "maxHp": sum(p["maxHp"] for p in party),
                         "deck": [f"{c['id']}+{c['upgrade']}" if c.get("upgrade") else c["id"] for c in me["deck"]],
-                        "relics": [r if isinstance(r, str) else r["id"] for r in me["relics"]],
-                        "potions": [p if p is None or isinstance(p, str) else p["id"] for p in me["potions"]],
                         "original": {
                             "won": fl["combat"]["won"],
                             "hpAfter": fl.get("hpAfter"),
@@ -67,20 +79,19 @@ def collect(paths, kinds, max_cases):
 
 
 def play(wb, case, config, max_turns):
-    wb.call("wb.run", {"character": case["character"], "seed": case["seed"], "ascension": 0})
-    wb.call("deck.set", {"cards": case["deck"]})
-    wb.call("relics.set", {"relics": case["relics"]})
-    wb.call("potions.set", {"potions": [p for p in case["potions"] if p]})
-    wb.call("wb.sethp", {"hp": case["hp"], "maxHp": case["maxHp"]})
-    wb.call(
-        "wb.start",
-        {"character": case["character"], "seed": case["seed"], "encounter": case["encounter"], "heal": False},
-    )
+    characters = [p["character"] for p in case["party"]]
+    setup = {"characters": characters, "seed": case["seed"], "ascension": 0, "net": case.get("net") or "single"}
+    wb.call("wb.run", setup)
+    for slot, p in enumerate(case["party"]):
+        wb.call("deck.set", {"cards": p["deck"], "player": slot})
+        wb.call("relics.set", {"relics": p["relics"], "player": slot})
+        wb.call("potions.set", {"potions": [q for q in p["potions"] if q], "player": slot})
+        wb.call("wb.sethp", {"hp": p["hp"], "maxHp": p["maxHp"], "player": slot})
+    wb.call("wb.start", {**setup, "encounter": case["encounter"], "heal": False})
     res = wb.call("wb.autoplay", {"maxTurns": max_turns, **config})
-    me = res["state"]["players"][0]
     return {
         "won": res["won"],
-        "hp": me["creature"]["hp"],
+        "hp": sum(p["creature"]["hp"] for p in res["state"]["players"]),
         "turns": res["turns"],
         "nodes": res["nodes"],
         "millis": round(res["micros"] / 1000, 1),
@@ -109,6 +120,7 @@ def main():
     rows = []
     for case in cases:
         row = {k: case[k] for k in ("run", "seed", "floor", "type", "encounter", "hp", "maxHp", "original")}
+        row["players"] = len(case["party"])
         row["deckSize"] = len(case["deck"])
         row["results"] = {}
         for name, config in configs.items():

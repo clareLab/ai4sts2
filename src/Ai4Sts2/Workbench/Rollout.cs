@@ -75,68 +75,140 @@ public static class Rollout
             var single = new Search<SearchAction>(domain, options).Run();
             return (single, single.Line);
         }
-        var root = Loader.Take();
-        var line = new List<SearchAction>();
-        SearchResult<SearchAction>? last = null;
-        var nodes = 0;
-        var micros = 0.0;
-        for (var p = 0; p < state.Players.Count; p++)
+        var sw = Stopwatch.StartNew();
+        var party = new PartySearch(session, domain, options with { Turns = 1 }, Math.Max(1, options.Beam));
+        var (score, line) = party.Solve(Math.Max(1, options.Turns));
+        var summary = new SearchResult<SearchAction>(
+            score,
+            score,
+            line,
+            "coordinate",
+            options.Turns,
+            party.Nodes,
+            0,
+            0,
+            0,
+            0,
+            party.Joints,
+            party.Heads,
+            0,
+            0,
+            [],
+            sw.Elapsed.TotalMicroseconds,
+            0,
+            0,
+            0,
+            true
+        );
+        return (summary, line);
+    }
+
+    private sealed class PartySearch(Session session, CombatDomain domain, SearchOptions single, int width)
+    {
+        public int Nodes { get; private set; }
+
+        public int Joints { get; private set; }
+
+        public int Heads { get; private set; }
+
+        public (double Score, List<SearchAction> Line) Solve(int turns)
         {
-            var player = state.Players[p];
-            if (Session.HasEnded(player) || !player.Creature.IsAlive || domain.Terminal)
+            var (state, _) = Session.Current(0);
+            var order = new List<int>();
+            for (var p = 0; p < state.Players.Count; p++)
             {
-                continue;
+                var player = state.Players[p];
+                if (player.Creature.IsAlive && !Session.HasEnded(player))
+                {
+                    order.Add(p);
+                }
             }
-            domain.ActivePlayer = p;
-            var result = new Search<SearchAction>(domain, options with { Turns = 1 }).Run();
-            nodes += result.Nodes;
-            micros += result.Micros;
-            last = result;
-            foreach (var action in result.Line)
+            if (order.Count == 0 || domain.Terminal)
             {
-                if (action.Kind == "end" || domain.Terminal)
+                return (domain.Evaluate(), []);
+            }
+            var root = Loader.Take();
+            try
+            {
+                domain.ActivePlayer = order[0];
+                var head = new Search<SearchAction>(domain, single).Run();
+                Nodes += head.Nodes;
+                var heads = new List<List<SearchAction>> { Strip(head.Line) };
+                if (turns > 1)
+                {
+                    foreach (var entry in head.Beam)
+                    {
+                        var stripped = Strip(entry.Line);
+                        if (heads.Count >= width)
+                        {
+                            break;
+                        }
+                        if (heads.All(h => !h.SequenceEqual(stripped)))
+                        {
+                            heads.Add(stripped);
+                        }
+                    }
+                }
+                Heads += heads.Count;
+                var best = double.NegativeInfinity;
+                var bestLine = new List<SearchAction>();
+                foreach (var lead in heads)
+                {
+                    _ = Loader.Restore(root, session.Pump);
+                    var joint = new List<SearchAction>();
+                    Follow(lead, joint);
+                    foreach (var p in order.Skip(1))
+                    {
+                        var (current, _) = Session.Current(0);
+                        var player = current.Players[p];
+                        if (domain.Terminal || !player.Creature.IsAlive || Session.HasEnded(player))
+                        {
+                            continue;
+                        }
+                        domain.ActivePlayer = p;
+                        var result = new Search<SearchAction>(domain, single).Run();
+                        Nodes += result.Nodes;
+                        Follow(Strip(result.Line), joint);
+                    }
+                    domain.ActivePlayer = null;
+                    var closing = domain.Closing();
+                    foreach (var action in closing)
+                    {
+                        _ = domain.Apply(action);
+                    }
+                    var score = turns > 1 && !domain.Terminal ? Solve(turns - 1).Score : domain.Evaluate();
+                    Joints++;
+                    if (score > best)
+                    {
+                        best = score;
+                        bestLine = joint.Concat(closing).ToList();
+                    }
+                }
+                return (best, bestLine);
+            }
+            finally
+            {
+                domain.ActivePlayer = null;
+                _ = Loader.Restore(root, session.Pump);
+                root.Release();
+            }
+        }
+
+        private void Follow(List<SearchAction> line, List<SearchAction> joint)
+        {
+            foreach (var action in line)
+            {
+                if (domain.Terminal)
                 {
                     break;
                 }
                 _ = domain.Apply(action);
-                line.Add(action);
+                joint.Add(action);
             }
         }
-        domain.ActivePlayer = null;
-        _ = Loader.Restore(root, session.Pump);
-        root.Release();
-        line.AddRange(domain.Closing());
-        var summary = last is null
-            ? new SearchResult<SearchAction>(
-                0,
-                0,
-                line,
-                "coordinate",
-                1,
-                nodes,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                [],
-                micros,
-                0,
-                0,
-                0,
-                true
-            )
-            : last with
-            {
-                Line = line,
-                Leaf = "coordinate",
-                Nodes = nodes,
-                Micros = micros,
-            };
-        return (summary, line);
+
+        private static List<SearchAction> Strip(IReadOnlyList<SearchAction> line) =>
+            line.TakeWhile(a => a.Kind != "end").ToList();
     }
 
     public static (bool Won, int Turns, int Nodes, double Micros) PlayCombat(

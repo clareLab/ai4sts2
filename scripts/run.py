@@ -431,11 +431,11 @@ def main():
     ap.add_argument("--max-nodes", type=int, default=600)
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=30)
-    ap.add_argument("--beam", type=int, default=4)
-    ap.add_argument("--turns", type=int, default=1)
-    ap.add_argument("--boss-nodes", type=int, default=2500)
-    ap.add_argument("--boss-beam", type=int, default=5)
-    ap.add_argument("--boss-turns-search", type=int, default=3)
+    ap.add_argument("--beam", type=int, default=None)
+    ap.add_argument("--turns", type=int, default=None)
+    ap.add_argument("--boss-nodes", type=int, default=None)
+    ap.add_argument("--boss-beam", type=int, default=None)
+    ap.add_argument("--boss-turns-search", type=int, default=None)
     ap.add_argument("--escalate", type=float, default=0.0)
     ap.add_argument("--no-diversify", action="store_true")
     ap.add_argument("--no-canonical", action="store_true")
@@ -447,6 +447,17 @@ def main():
     ap.add_argument("--boss", action="store_true")
     ap.add_argument("--boss-turns", type=int, default=6)
     a = ap.parse_args()
+    party = a.players > 1
+    defaults = {
+        "beam": 3 if party else 4,
+        "turns": 2 if party else 1,
+        "boss_nodes": 1500 if party else 2500,
+        "boss_beam": 4 if party else 5,
+        "boss_turns_search": 2 if party else 3,
+    }
+    for key, value in defaults.items():
+        if getattr(a, key) is None:
+            setattr(a, key, value)
     a.character = a.character.upper()
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
     wb = Harness(a.instance, timeout=3600)
