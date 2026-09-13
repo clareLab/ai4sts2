@@ -52,6 +52,7 @@ public static class HarnessOps
             "run.rng.set" => Result(SetRunRng(request.Args)),
             "deck.set" => SetDeckAsync(request.Args),
             "potions.set" => SetPotionsAsync(request.Args),
+            "relics.set" => Result(SetRelics(request.Args)),
             "combat.enter" => EnterCombatAsync(host, request.Args),
             "combat.state" => Result(CombatDump.Capture()),
             "combat.play" => PlayAsync(host, request.Args),
@@ -73,7 +74,7 @@ public static class HarnessOps
             "wb.snapbench" => Result(WorkbenchSnapBench(request.Args)),
             "wb.restore" => Result(WorkbenchRestore(request.Args)),
             "wb.search" => Result(WorkbenchSearch(request.Args)),
-            "wb.view" => Result(WorkbenchView()),
+            "wb.view" => Result(WorkbenchView(request.Args)),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
             "wb.take" => Result(WorkbenchTake(request.Args)),
@@ -325,6 +326,25 @@ public static class HarnessOps
         return RunSetup.Capture(run);
     }
 
+    private static RunDump SetRelics(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var run = RunManager.Instance.State ?? throw new InvalidOperationException("no run");
+        var player = a.TryGetProperty("player", out var p) ? run.Players[p.GetInt32()] : LocalContext.GetMe(run)!;
+        var ids = a.GetProperty("relics").EnumerateArray().Select(c => c.GetString()!.ToUpperInvariant()).ToList();
+        foreach (var relic in player.Relics.ToList())
+        {
+            player.RemoveRelicInternal(relic, true);
+        }
+        foreach (var id in ids)
+        {
+            var model = ModelDb.GetById<RelicModel>(new ModelId(ModelId.SlugifyCategory<RelicModel>(), id)).ToMutable();
+            player.AddRelicInternal(model, -1, true);
+            model.FloorAddedToDeck = run.TotalFloor;
+        }
+        return RunSetup.Capture(run);
+    }
+
     private static async Task<JsonElement?> SetPotionsAsync(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
@@ -366,7 +386,8 @@ public static class HarnessOps
         return RunSetup.Capture(Session.Instance.NewRun(Characters(a), seed, ascension, map, HostRequested(a)));
     }
 
-    private static object WorkbenchView() => Flow(Session.Instance.Flow.View());
+    private static object WorkbenchView(JsonElement? args) =>
+        Flow(Session.Instance.Flow.View(args is { } a ? PlayerOf(a) : 0));
 
     private static object WorkbenchTravel(JsonElement? args)
     {
@@ -402,7 +423,11 @@ public static class HarnessOps
     private static object WorkbenchRest(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var ok = Session.Instance.Flow.Rest(a.GetProperty("option").GetString()!);
+        var options =
+            a.TryGetProperty("options", out var list) && list.ValueKind == JsonValueKind.Array
+                ? list.EnumerateArray().Select(o => o.GetString()).ToList()
+                : [a.GetProperty("option").GetString()];
+        var ok = Session.Instance.Flow.Rest(options);
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
 
@@ -435,14 +460,26 @@ public static class HarnessOps
 
     private static object WorkbenchRelic(JsonElement? args)
     {
-        int? index =
-            args is { } a && a.TryGetProperty("index", out var i) && i.ValueKind == JsonValueKind.Number
-                ? i.GetInt32()
-                : null;
-        var picked = Session.Instance.Flow.PickRelic(index);
+        List<int?> votes = [];
+        if (args is { } a && a.TryGetProperty("votes", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            votes.AddRange(
+                list.EnumerateArray().Select(v => v.ValueKind == JsonValueKind.Number ? v.GetInt32() : (int?)null)
+            );
+        }
+        else
+        {
+            votes.Add(
+                args is { } b && b.TryGetProperty("index", out var i) && i.ValueKind == JsonValueKind.Number
+                    ? i.GetInt32()
+                    : null
+            );
+        }
+        var picked = Session.Instance.Flow.PickRelics(votes);
         return new
         {
-            Picked = picked,
+            Picked = picked.Count > 0 ? picked[0] : null,
+            PickedAll = picked,
             View = Session.Instance.Flow.View(),
             Run = RunSetup.Capture(Session.Instance.Run!),
         };
@@ -451,16 +488,19 @@ public static class HarnessOps
     private static object WorkbenchBuy(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var ok = Session.Instance.Flow.Buy(a.GetProperty("index").GetInt32());
+        var ok = Session.Instance.Flow.Buy(a.GetProperty("index").GetInt32(), PlayerOf(a));
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
 
     private static object WorkbenchRemove(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var ok = Session.Instance.Flow.RemoveCard(a.GetProperty("deck").GetInt32());
+        var ok = Session.Instance.Flow.RemoveCard(a.GetProperty("deck").GetInt32(), PlayerOf(a));
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
+
+    private static int PlayerOf(JsonElement a) =>
+        a.ValueKind == JsonValueKind.Object && a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
 
     private static object WorkbenchNextAct()
     {
@@ -541,7 +581,7 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         var session = Session.Instance;
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
-        var player = LocalContext.GetMe(run)!;
+        var player = run.Players[PlayerOf(a)];
         var deck = player.Deck.Cards.Where(c => c.IsUpgradable).ToList();
         var choices = new List<(string Label, int? Index, Action Apply)>();
         var seen = new HashSet<string>();
@@ -569,7 +609,8 @@ public static class HarnessOps
         {
             throw new InvalidOperationException("not in a shop");
         }
-        var inventory = merchant.GetLocalInventory();
+        var slot = PlayerOf(a);
+        var inventory = merchant.Inventories[slot];
         var player = inventory.Player;
         var choices = new List<(string Label, int? Index, Action Apply)> { ("Nothing", null, new Action(() => { })) };
         var entries = inventory.AllEntries.ToList();
@@ -596,7 +637,7 @@ public static class HarnessOps
                     (
                         $"Remove {player.Deck.Cards[strike].Id.Entry}",
                         index,
-                        new Action(() => session.Flow.RemoveCard(strike))
+                        new Action(() => session.Flow.RemoveCard(strike, slot))
                     )
                 );
                 continue;
@@ -607,7 +648,7 @@ public static class HarnessOps
                 MerchantRelicEntry relic => relic.Model?.Id.Entry ?? "relic",
                 _ => entry.GetType().Name,
             };
-            choices.Add((label, index, new Action(() => session.Flow.Buy(index))));
+            choices.Add((label, index, new Action(() => session.Flow.Buy(index, slot))));
         }
         var evaluation = Rollout.EvaluateChoices(session, "shop", choices, SearchOptionsFrom(a), PlanFrom(a));
         return new { Evaluation = evaluation, View = session.Flow.View() };
@@ -743,9 +784,13 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         var run = Session.Instance.Run ?? throw new InvalidOperationException("run not set up");
         var player = run.Players[a.TryGetProperty("player", out var p) ? p.GetInt32() : 0];
+        if (a.TryGetProperty("maxHp", out var m) && m.ValueKind == JsonValueKind.Number)
+        {
+            player.Creature.MaxHp = m.GetInt32();
+        }
         var hp = a.GetProperty("hp").GetInt32();
         player.Creature._currentHp = Math.Min(hp, player.Creature.MaxHp);
-        return new { Hp = player.Creature.CurrentHp };
+        return new { Hp = player.Creature.CurrentHp, player.Creature.MaxHp };
     }
 
     private static object WorkbenchAwaits()

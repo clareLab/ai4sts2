@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.CardRewardAlternatives;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.TreasureRelicPicking;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
@@ -57,6 +58,7 @@ public sealed class RunFlow(Session session)
 {
     private readonly List<(RewardsSet Set, Task Done)> _offered = [];
     private TreasureRoom? _openedChest;
+    private List<RelicPickingResult>? _awarded;
 
     public void Begin()
     {
@@ -67,7 +69,7 @@ public sealed class RunFlow(Session session)
         run.ExtraFields.StartedWithNeow = false;
     }
 
-    public RunView View()
+    public RunView View(int player = 0)
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         var room = run.CurrentRoom;
@@ -107,7 +109,7 @@ public sealed class RunFlow(Session session)
                 ? RunManager.Instance.TreasureRoomRelicSynchronizer.CurrentRelics?.Select(r => r.Id.Entry).ToList()
                     ?? []
                 : [];
-        var shop = room is MerchantRoom merchant ? ShopEntries(merchant) : [];
+        var shop = room is MerchantRoom merchant ? ShopEntries(merchant, player) : [];
         return new RunView(
             run.CurrentActIndex,
             run.TotalFloor,
@@ -130,9 +132,9 @@ public sealed class RunFlow(Session session)
         );
     }
 
-    private static List<ShopEntryView> ShopEntries(MerchantRoom merchant)
+    private static List<ShopEntryView> ShopEntries(MerchantRoom merchant, int player)
     {
-        var inventory = merchant.GetLocalInventory();
+        var inventory = merchant.Inventories[player];
         var list = new List<ShopEntryView>();
         foreach (var entry in inventory.AllEntries)
         {
@@ -249,10 +251,15 @@ public sealed class RunFlow(Session session)
             return 0;
         }
         var gold = 0;
+        var oneOff = RunManager.Instance.OneOffSynchronizer;
         session.Pump.Drive(
             async () =>
             {
                 gold = await room.DoNormalRewards();
+                foreach (var other in Others(run))
+                {
+                    gold += await oneOff.DoTreasureRoomRewards(other);
+                }
                 await room.DoExtraRewardsIfNeeded();
             },
             "open chest"
@@ -261,7 +268,7 @@ public sealed class RunFlow(Session session)
         return gold;
     }
 
-    public string? PickRelic(int? index)
+    public IReadOnlyList<string?> PickRelics(IReadOnlyList<int?> votes)
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         if (run.CurrentRoom is not TreasureRoom)
@@ -270,47 +277,74 @@ public sealed class RunFlow(Session session)
         }
         var sync = RunManager.Instance.TreasureRoomRelicSynchronizer;
         var relics = sync.CurrentRelics ?? throw new InvalidOperationException("no relics offered");
-        string? picked = null;
-        if (index is { } i)
+        var players = run.Players.ToList();
+        var picked = new string?[players.Count];
+        if (votes.Any(v => v is { } i && (i < 0 || i >= relics.Count)))
         {
-            var relic = relics[i];
-            var player = LocalContext.GetMe(run)!;
-            session.Pump.Drive(() => RelicCmd.Obtain(relic.ToMutable(), player), $"obtain {relic.Id.Entry}");
-            picked = relic.Id.Entry;
+            throw new ArgumentException($"relic vote out of range (offered {relics.Count})");
         }
-        session.Pump.Run(sync.SkipRelicLocally);
-        foreach (var other in Others(run))
+        _awarded = [];
+        sync.RelicsAwarded += Awarded;
+        try
         {
-            session.Pump.Run(() => sync.OnPicked(other, null));
+            if (!RunManager.Instance.IsSingleplayerOrFakeMultiplayer)
+            {
+                foreach (var other in Others(run))
+                {
+                    var slot = players.IndexOf(other);
+                    var vote = slot < votes.Count ? votes[slot] : null;
+                    session.Pump.Run(() => sync.OnPicked(other, vote));
+                }
+            }
+            session.Pump.Run(() => sync.PickRelicLocally(votes.Count > 0 ? votes[0] : null));
         }
+        finally
+        {
+            sync.RelicsAwarded -= Awarded;
+        }
+        foreach (var result in _awarded)
+        {
+            if (result.player is not { } winner || result.type == RelicPickingResultType.Skipped)
+            {
+                continue;
+            }
+            var relic = result.relic;
+            session.Pump.Drive(() => RelicCmd.Obtain(relic.ToMutable(), winner), $"obtain {relic.Id.Entry}");
+            picked[players.IndexOf(winner)] = relic.Id.Entry;
+        }
+        _awarded = null;
         return picked;
     }
 
-    public bool Buy(int index)
+    private void Awarded(List<RelicPickingResult> results) => _awarded?.AddRange(results);
+
+    public bool Buy(int index, int player = 0)
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         if (run.CurrentRoom is not MerchantRoom merchant)
         {
             throw new InvalidOperationException("not in a shop");
         }
-        var inventory = merchant.GetLocalInventory();
+        var inventory = merchant.Inventories[player];
         var entry = inventory.AllEntries.ElementAt(index);
         var ok = false;
+        using var scope = Session.ActAs(inventory.Player);
         session.Pump.Drive(async () => ok = await entry.OnTryPurchaseWrapper(inventory), $"buy {index}");
         return ok;
     }
 
-    public bool RemoveCard(int deckIndex)
+    public bool RemoveCard(int deckIndex, int player = 0)
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         if (run.CurrentRoom is not MerchantRoom merchant)
         {
             throw new InvalidOperationException("not in a shop");
         }
-        var inventory = merchant.GetLocalInventory();
+        var inventory = merchant.Inventories[player];
         var entry = inventory.CardRemovalEntry ?? throw new InvalidOperationException("no removal entry");
         session.Selector.Enqueue(deckIndex);
         var ok = false;
+        using var scope = Session.ActAs(inventory.Player);
         session.Pump.Drive(async () => ok = await entry.OnTryPurchaseWrapper(inventory, false, false), "remove card");
         if (ok)
         {
@@ -455,30 +489,36 @@ public sealed class RunFlow(Session session)
             && _offered.Any(e => e.Set.Player == run.Players[player] && !sync.IsRewardsSetCompleted(e.Set));
     }
 
-    public bool Rest(string optionId)
+    public bool Rest(string optionId) => Rest([optionId]);
+
+    public bool Rest(IReadOnlyList<string?> optionIds)
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         if (run.CurrentRoom is not RestSiteRoom site)
         {
             throw new InvalidOperationException("not at a rest site");
         }
-        var index = site.Options.ToList().FindIndex(o => o.OptionId == optionId);
+        var first = optionIds.Count > 0 ? optionIds[0] : null;
+        var index = first is null ? -1 : site.Options.ToList().FindIndex(o => o.OptionId == first);
         if (index < 0)
         {
-            throw new ArgumentException($"rest option {optionId} unavailable");
+            throw new ArgumentException($"rest option {first} unavailable");
         }
         var sync = RunManager.Instance.RestSiteSynchronizer;
         var ok = false;
-        session.Pump.Drive(async () => ok = await sync.ChooseLocalOption(index), $"rest {optionId}");
+        session.Pump.Drive(async () => ok = await sync.ChooseLocalOption(index), $"rest {first}");
+        var players = run.Players.ToList();
         foreach (var other in Others(run))
         {
+            var slot = players.IndexOf(other);
+            var wanted = (slot < optionIds.Count ? optionIds[slot] : null) ?? first;
             var options = sync.GetOptionsForPlayer(other).ToList();
-            var mirrored = options.FindIndex(o => o.OptionId == optionId);
+            var mirrored = options.FindIndex(o => o.OptionId == wanted);
             var pick = mirrored >= 0 ? mirrored : 0;
             if (options.Count > 0)
             {
                 using var scope = Session.ActAs(other);
-                session.Pump.Drive(() => sync.ChooseOption(other, pick), $"rest {optionId} for {other.NetId}");
+                session.Pump.Drive(() => sync.ChooseOption(other, pick), $"rest {wanted} for {other.NetId}");
             }
         }
         return ok;

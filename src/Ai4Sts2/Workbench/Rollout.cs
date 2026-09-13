@@ -468,7 +468,7 @@ public static class Rollout
             {
                 _ = flow.OpenChest();
                 var relics = flow.View().TreasureRelics;
-                _ = flow.PickRelic(relics.Count > 0 ? 0 : null);
+                _ = flow.PickRelics(run.Players.Select((_, i) => i < relics.Count ? i : (int?)null).ToList());
                 return;
             }
             return;

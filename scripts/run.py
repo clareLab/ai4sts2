@@ -104,12 +104,52 @@ def handle_event(wb, a, entry):
     return True
 
 
-def handle_treasure(wb, entry):
+def handle_treasure(wb, a, entry):
     gold = wb.call("wb.chest")["micros"]
     v = wb.call("wb.view")["view"]
     relics = v["treasureRelics"]
-    res = wb.call("wb.relic", {"index": 0} if relics else {})
-    entry["treasure"] = {"gold": gold, "offered": relics, "picked": res.get("picked")}
+    votes = [i if i < len(relics) else None for i in range(a.players)]
+    res = wb.call("wb.relic", {"votes": votes})
+    entry["treasure"] = {
+        "gold": gold,
+        "offered": relics,
+        "picked": res.get("picked"),
+        "pickedAll": res.get("pickedAll"),
+    }
+
+
+def weakest(players):
+    alive = [p for p in players if p["hp"] > 0] or players
+    return min(alive, key=lambda p: p["hp"] / max(1, p["maxHp"]))
+
+
+def handle_rest(wb, a, entry, v, players):
+    before_boss = v["actFloor"] >= 14
+    threshold = 0.85 if before_boss else 0.6
+    options = []
+    for slot, p in enumerate(players):
+        if p["hp"] <= 0:
+            options.append(None)
+            continue
+        wanted = "HEAL" if p["hp"] < p["maxHp"] * threshold else "SMITH"
+        option = next((o for o in v["restOptions"] if o.upper() == wanted), v["restOptions"][0])
+        if option.upper() == "SMITH":
+            ev = wb.call("wb.evalsmith", {"player": slot, **plan_args(a)})["evaluation"]
+            entry.setdefault("smithEvaluations", []).append(ev)
+            if slot == 0:
+                entry["evaluation"] = ev
+            best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+            if best is not None and best.get("index") is not None:
+                wb.call("selector.enqueue", {"choice": [best["index"]]})
+        options.append(option)
+    res = wb.call("wb.rest", {"options": options})
+    entry["rest"] = {
+        "option": options[0],
+        "options": options,
+        "ok": res["ok"],
+        "upgraded": entry.get("evaluation", {}).get("best"),
+        "upgradedAll": [e.get("best") for e in entry.get("smithEvaluations", [])],
+    }
 
 
 def plan_args(a):
@@ -131,30 +171,36 @@ def handle_shop(wb, a, entry):
     v = wb.call("wb.view")["view"]
     bought = []
     evaluations = []
+    for slot in range(a.players):
+        shop_player(wb, a, slot, bought, evaluations)
+    entry["shopEvaluations"] = evaluations
+    entry["shop"] = {"bought": bought, "offered": [(e["kind"], e.get("id"), e["cost"]) for e in v["shop"]]}
+
+
+def shop_player(wb, a, slot, bought, evaluations):
     for _ in range(3):
-        ev = wb.call("wb.evalshop", plan_args(a))["evaluation"]
+        ev = wb.call("wb.evalshop", {"player": slot, **plan_args(a)})["evaluation"]
         evaluations.append(ev)
         best = next(o for o in ev["options"] if o["label"] == ev["best"])
         if best.get("index") is None:
             break
-        shop = wb.call("wb.view")["view"]["shop"]
+        shop = wb.call("wb.view", {"player": slot})["view"]["shop"]
         e = shop[best["index"]]
         if e["kind"] == "removal":
-            deck = wb.call("run.state")["players"][0]["deck"]
+            deck = wb.call("run.state")["players"][slot]["deck"]
             idx = next((i for i, c in enumerate(deck) if c["id"].startswith("STRIKE") and not c.get("upgrade")), None)
-            ok = idx is not None and wb.call("wb.remove", {"deck": idx})["ok"]
+            ok = idx is not None and wb.call("wb.remove", {"deck": idx, "player": slot})["ok"]
         else:
-            ok = wb.call("wb.buy", {"index": e["index"]})["ok"]
+            ok = wb.call("wb.buy", {"index": e["index"], "player": slot})["ok"]
         if not ok:
             break
-        bought.append({"kind": e["kind"], "id": e.get("id"), "cost": e["cost"], "label": best["label"]})
-    entry["shopEvaluations"] = evaluations
-    for e in sorted((e for e in v["shop"] if e["kind"] == "potion" and e["stocked"]), key=lambda e: e["cost"]):
-        state = wb.call("run.state")["players"][0]
+        bought.append({"kind": e["kind"], "id": e.get("id"), "cost": e["cost"], "label": best["label"], "player": slot})
+    shop = wb.call("wb.view", {"player": slot})["view"]["shop"]
+    for e in sorted((e for e in shop if e["kind"] == "potion" and e["stocked"]), key=lambda e: e["cost"]):
+        state = wb.call("run.state")["players"][slot]
         affordable = e["cost"] <= state["gold"] and any(p is None for p in state["potions"])
-        if affordable and wb.call("wb.buy", {"index": e["index"]})["ok"]:
-            bought.append({"kind": "potion", "id": e.get("id"), "cost": e["cost"]})
-    entry["shop"] = {"bought": bought, "offered": [(e["kind"], e.get("id"), e["cost"]) for e in v["shop"]]}
+        if affordable and wb.call("wb.buy", {"index": e["index"], "player": slot})["ok"]:
+            bought.append({"kind": "potion", "id": e.get("id"), "cost": e["cost"], "player": slot})
 
 
 def take_rewards(wb, a, entry):
@@ -205,7 +251,8 @@ def play_run(wb, a, seed):
         view = wb.call("wb.view")["view"]
         state = wb.call("run.state")
         me = state["players"][0]
-        choice = choose_point(view, me["hp"], me["maxHp"], view["floor"])
+        weak = weakest(state["players"])
+        choice = choose_point(view, weak["hp"], weak["maxHp"], view["floor"])
         if choice is None:
             outcome = "stuck"
             break
@@ -234,10 +281,16 @@ def play_run(wb, a, seed):
             "room": v["room"],
             "model": v.get("roomModel"),
             "hpBefore": me["hp"],
+            "hpBeforeAll": [p["hp"] for p in state["players"]],
             "choices": view["choices"],
             "pathEvaluation": path_eval,
         }
         alive = True
+        if v["inCombat"] and choice["type"] in ("Boss", "Elite"):
+            entry["party"] = [
+                {k: p[k] for k in ("character", "hp", "maxHp", "gold", "deck", "relics", "potions")}
+                for p in state["players"]
+            ]
         if v["inCombat"]:
             alive = combat_entry(entry, autoplay(wb, a, choice["type"] in ("Boss", "Elite")))
             if alive:
@@ -252,24 +305,15 @@ def play_run(wb, a, seed):
         elif v["room"] == "EventRoom":
             alive = handle_event(wb, a, entry)
         elif v["room"] == "TreasureRoom":
-            handle_treasure(wb, entry)
+            handle_treasure(wb, a, entry)
         elif v["room"] == "MerchantRoom":
             handle_shop(wb, a, entry)
         elif v["restOptions"]:
-            before_boss = v["actFloor"] >= 14
-            threshold = 0.85 if before_boss else 0.6
-            wanted = "HEAL" if me["hp"] < me["maxHp"] * threshold else "SMITH"
-            option = next((o for o in v["restOptions"] if o.upper() == wanted), v["restOptions"][0])
-            if option.upper() == "SMITH":
-                ev = wb.call("wb.evalsmith", plan_args(a))["evaluation"]
-                entry["evaluation"] = ev
-                best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
-                if best is not None and best.get("index") is not None:
-                    wb.call("selector.enqueue", {"choice": [best["index"]]})
-            res = wb.call("wb.rest", {"option": option})
-            entry["rest"] = {"option": option, "ok": res["ok"], "upgraded": entry.get("evaluation", {}).get("best")}
-        after = wb.call("run.state")["players"][0]
+            handle_rest(wb, a, entry, v, state["players"])
+        players_after = wb.call("run.state")["players"]
+        after = players_after[0]
         entry["hpAfter"] = after["hp"]
+        entry["hpAfterAll"] = [p["hp"] for p in players_after]
         entry["deckSize"] = len(after["deck"])
         entry["gold"] = after["gold"]
         entry["wallSeconds"] = round(time.time() - t1, 3)
@@ -278,15 +322,21 @@ def play_run(wb, a, seed):
             outcome = "died"
             print(f"  floor {entry['floor']:>2} {choice['type']:<8} {entry.get('model') or entry['room']:<28} died")
             break
+        hp_before = "+".join(str(h) for h in entry["hpBeforeAll"]) if a.players > 1 else f"{entry['hpBefore']:>3}"
+        hp_after = "+".join(str(h) for h in entry["hpAfterAll"]) if a.players > 1 else f"{entry['hpAfter']:>3}"
         print(
-            f"  floor {entry['floor']:>2} {choice['type']:<8} {entry.get('model') or entry['room']:<28} hp {entry['hpBefore']:>3} -> {entry['hpAfter']:>3}"
+            f"  floor {entry['floor']:>2} {choice['type']:<8} {entry.get('model') or entry['room']:<28} hp {hp_before} -> {hp_after}"
             + (
                 f"  combat {entry['combat']['turns']} turns {entry['combat']['nodes']} nodes"
                 if "combat" in entry
                 else ""
             )
             + (f"  took {[t.get('card') or t.get('value') for t in entry['taken']]}" if entry.get("taken") else "")
-            + (f"  rest {entry['rest']['option']} {entry['rest'].get('upgraded') or ''}" if entry.get("rest") else "")
+            + (
+                f"  rest {'/'.join(o or '-' for o in entry['rest']['options'])} {'/'.join(u or '-' for u in entry['rest']['upgradedAll'])}"
+                if entry.get("rest")
+                else ""
+            )
             + (f"  event {entry['event']['chosen']}" if entry.get("event") else "")
             + (f"  relic {entry['treasure']['picked']}" if entry.get("treasure") else "")
             + (f"  shop {[b.get('id') or b.get('card') for b in entry['shop']['bought']]}" if entry.get("shop") else "")
