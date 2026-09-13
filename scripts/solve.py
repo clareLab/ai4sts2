@@ -77,7 +77,7 @@ def solve_case(wb, dev, a, seed, encounter, cards):
     while state["inProgress"] and turns < a.max_turns:
         res = wb.call(
             "wb.search",
-            {"maxNodes": a.max_nodes, "maxDepth": a.max_depth, "leaf": a.leaf, "verify": a.verify},
+            {"maxNodes": a.max_nodes, "maxDepth": a.max_depth, "leaf": a.leaf, "beam": a.beam, "turns": a.turns},
         )["result"]
         line = res["line"]
         trace["searches"].append(
@@ -90,6 +90,7 @@ def solve_case(wb, dev, a, seed, encounter, cards):
                         "score",
                         "estimated",
                         "leaf",
+                        "turns",
                         "verified",
                         "nodes",
                         "leaves",
@@ -157,7 +158,8 @@ def main():
     ap.add_argument("--max-turns", type=int, default=40)
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--leaf", choices=["exact", "estimate"], default="exact")
-    ap.add_argument("--verify", type=int, default=3)
+    ap.add_argument("--beam", type=int, default=3)
+    ap.add_argument("--turns", type=int, default=1)
     a = ap.parse_args()
     a.character = a.character.upper()
     encounters = [e.upper() for e in a.encounter] or ["NIBBITS_WEAK"]
@@ -211,7 +213,8 @@ def main():
             "maxNodes": a.max_nodes,
             "maxDepth": a.max_depth,
             "leaf": a.leaf,
-            "verifyTop": a.verify,
+            "beam": a.beam,
+            "turns": a.turns,
             "verified": dev is not None,
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),

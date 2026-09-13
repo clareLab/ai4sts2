@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Ai4Sts2.Workbench;
 
-public sealed record SearchOptions(int MaxNodes, int MaxDepth, bool Estimate, int Verify);
+public sealed record SearchOptions(int MaxNodes, int MaxDepth, bool Estimate, int Beam, int Turns);
 
 public interface ISearchDomain<TAction>
 {
@@ -28,6 +28,7 @@ public sealed record SearchResult<TAction>(
     double Estimated,
     IReadOnlyList<TAction> Line,
     string Leaf,
+    int Turns,
     int Nodes,
     int Leaves,
     int Transpositions,
@@ -44,7 +45,6 @@ public sealed record SearchResult<TAction>(
 public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions options)
 {
     private readonly Dictionary<string, double> _table = [];
-    private readonly List<(double Score, List<TAction> Line, bool Terminal)> _candidates = [];
     private readonly Stopwatch _clock = new();
     private int _nodes;
     private int _leaves;
@@ -60,37 +60,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
     {
         _clock.Restart();
         var root = TakeSnapshot();
-        var estimated = Explore(0, [], out var best);
-        var score = estimated;
-        var line = best;
-        if (options.Estimate && options.Verify > 0 && _candidates.Count > 0)
-        {
-            score = double.NegativeInfinity;
-            foreach (var (_, candidate, terminal) in _candidates.OrderByDescending(c => c.Score).Take(options.Verify))
-            {
-                RestoreSnapshot(root);
-                var full = candidate.ToList();
-                foreach (var action in candidate)
-                {
-                    Apply(action);
-                }
-                if (!terminal)
-                {
-                    foreach (var action in domain.Closing())
-                    {
-                        Apply(action);
-                        full.Add(action);
-                    }
-                }
-                var real = domain.Evaluate();
-                _verified++;
-                if (real > score)
-                {
-                    score = real;
-                    line = full;
-                }
-            }
-        }
+        var (score, line, estimated) = Solve(1, root);
         RestoreSnapshot(root);
         root.Release();
         return new SearchResult<TAction>(
@@ -98,6 +68,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             estimated,
             line,
             options.Estimate ? "estimate" : "exact",
+            options.Turns,
             _nodes,
             _leaves,
             _transpositions,
@@ -112,17 +83,66 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         );
     }
 
-    private double Explore(int depth, List<TAction> path, out IReadOnlyList<TAction> bestLine)
+    private (double Score, IReadOnlyList<TAction> Line, double Estimated) Solve(int turn, Snapshot root)
+    {
+        var candidates = new List<(double Score, List<TAction> Line, bool Terminal)>();
+        var estimated = Explore(0, [], candidates, out var best);
+        if ((!options.Estimate && turn == options.Turns) || options.Beam <= 0 || candidates.Count == 0)
+        {
+            return (estimated, best, estimated);
+        }
+        var score = double.NegativeInfinity;
+        var line = best;
+        foreach (var (_, candidate, terminal) in candidates.OrderByDescending(c => c.Score).Take(options.Beam))
+        {
+            RestoreSnapshot(root);
+            var full = candidate.ToList();
+            foreach (var action in candidate)
+            {
+                Apply(action);
+            }
+            if (!terminal)
+            {
+                foreach (var action in domain.Closing())
+                {
+                    Apply(action);
+                    full.Add(action);
+                }
+            }
+            double real;
+            if (domain.Terminal || turn >= options.Turns)
+            {
+                real = domain.Evaluate();
+            }
+            else
+            {
+                var next = TakeSnapshot();
+                real = Solve(turn + 1, next).Score;
+                next.Release();
+            }
+            _verified++;
+            if (real > score)
+            {
+                score = real;
+                line = full;
+            }
+        }
+        return (score, line, estimated);
+    }
+
+    private double Explore(
+        int depth,
+        List<TAction> path,
+        List<(double Score, List<TAction> Line, bool Terminal)> candidates,
+        out IReadOnlyList<TAction> bestLine
+    )
     {
         bestLine = path.ToList();
         if (domain.Terminal)
         {
             _leaves++;
             var terminal = domain.Evaluate();
-            if (options.Estimate)
-            {
-                _candidates.Add((terminal, path.ToList(), true));
-            }
+            candidates.Add((terminal, path.ToList(), true));
             return terminal;
         }
         var key = domain.Key();
@@ -147,7 +167,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 }
                 Apply(action);
                 path.Add(action);
-                var score = Explore(depth + 1, path, out var line);
+                var score = Explore(depth + 1, path, candidates, out var line);
                 path.RemoveAt(path.Count - 1);
                 RestoreSnapshot(snap);
                 if (score > bestScore)
@@ -157,7 +177,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 }
             }
         }
-        var leaf = Leaf(path, ref snap, out var closed);
+        var leaf = Leaf(path, candidates, ref snap, out var closed);
         snap?.Release();
         _leaves++;
         if (leaf > bestScore)
@@ -170,27 +190,35 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         return bestScore;
     }
 
-    private double Leaf(List<TAction> path, ref Snapshot? snap, out List<TAction> closed)
+    private double Leaf(
+        List<TAction> path,
+        List<(double Score, List<TAction> Line, bool Terminal)> candidates,
+        ref Snapshot? snap,
+        out List<TAction> closed
+    )
     {
         var closing = domain.Closing();
         closed = path.Concat(closing).ToList();
+        double score;
         if (options.Estimate)
         {
-            var estimate = domain.Estimate();
-            _candidates.Add((estimate, path.ToList(), false));
-            return estimate;
+            score = domain.Estimate();
         }
-        if (closing.Count == 0)
+        else if (closing.Count == 0)
         {
-            return domain.Evaluate();
+            score = domain.Evaluate();
         }
-        snap ??= TakeSnapshot();
-        foreach (var action in closing)
+        else
         {
-            Apply(action);
+            snap ??= TakeSnapshot();
+            foreach (var action in closing)
+            {
+                Apply(action);
+            }
+            score = domain.Evaluate();
+            RestoreSnapshot(snap);
         }
-        var score = domain.Evaluate();
-        RestoreSnapshot(snap);
+        candidates.Add((score, path.ToList(), false));
         return score;
     }
 

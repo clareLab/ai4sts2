@@ -20,6 +20,7 @@ public sealed class Session
     private const ulong LocalNetId = 1;
     private readonly Dictionary<int, Snapshot> _snaps = [];
     private int _snapSeq;
+    private bool _appendedHistory;
     private IDisposable? _selectorScope;
 
     public ScriptSelector Selector { get; } = new();
@@ -39,6 +40,7 @@ public sealed class Session
             ExitRooms(Run);
             RunManager.Instance.CleanUp(true);
             Run = null;
+            _appendedHistory = false;
             _selectorScope?.Dispose();
             _selectorScope = null;
         }
@@ -90,7 +92,12 @@ public sealed class Session
             .GetById<EncounterModel>(new ModelId(ModelId.SlugifyCategory<EncounterModel>(), encounterId))
             .ToMutable();
         ExitRooms(run);
+        if (_appendedHistory && run._mapPointHistory.Count > 0 && run._mapPointHistory[^1].Count > 0)
+        {
+            run._mapPointHistory[^1].RemoveAt(run._mapPointHistory[^1].Count - 1);
+        }
         run.AppendToMapPointHistory(MapPointType.Monster, encounter.RoomType, encounter.Id);
+        _appendedHistory = true;
         var room = new CombatRoom(encounter, run);
         run.PushRoom(room);
         Pump.Drive(() => Hook.BeforeRoomEntered(run, room), "BeforeRoomEntered");

@@ -354,8 +354,9 @@ public static class HarnessOps
         var maxNodes = a.TryGetProperty("maxNodes", out var n) ? n.GetInt32() : 2000;
         var maxDepth = a.TryGetProperty("maxDepth", out var d) ? d.GetInt32() : 8;
         var leaf = a.TryGetProperty("leaf", out var l) ? l.GetString() ?? "exact" : "exact";
-        var verify = a.TryGetProperty("verify", out var v) ? v.GetInt32() : 3;
-        var options = new SearchOptions(maxNodes, maxDepth, leaf == "estimate", verify);
+        var beam = a.TryGetProperty("beam", out var b) ? b.GetInt32() : 3;
+        var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
+        var options = new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns);
         var result = new Search<SearchAction>(new CombatDomain(Session.Instance), options).Run();
         return new { Result = result, State = CombatDump.Capture() };
     }
