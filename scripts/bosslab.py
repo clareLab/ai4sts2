@@ -10,7 +10,7 @@ from pair import parse_config, split_tuning
 import metrics
 
 
-def collect(paths, kinds, max_cases):
+def collect(paths, kinds, max_cases, min_floor=0):
     cases = []
     for path in paths:
         with open(path, encoding="utf-8") as f:
@@ -21,7 +21,7 @@ def collect(paths, kinds, max_cases):
         for case in detail.get("cases", []):
             floors = case.get("floorsDetail") or []
             for fl in floors:
-                if fl.get("type") not in kinds or "combat" not in fl:
+                if fl.get("type") not in kinds or "combat" not in fl or fl.get("floor", 0) < min_floor:
                     continue
                 party = fl.get("party")
                 if party is None:
@@ -75,7 +75,10 @@ def collect(paths, kinds, max_cases):
                         },
                     }
                 )
-    return cases[-max_cases:] if max_cases else cases
+    if max_cases and len(cases) > max_cases:
+        step = len(cases) / max_cases
+        cases = [cases[int(i * step)] for i in range(max_cases)]
+    return cases
 
 
 def play(wb, case, config, max_turns):
@@ -105,6 +108,7 @@ def main():
     ap.add_argument("--runs", default="")
     ap.add_argument("--kinds", default="Boss")
     ap.add_argument("--max-cases", type=int, default=0)
+    ap.add_argument("--min-floor", type=int, default=0)
     ap.add_argument("--config", action="append", default=[])
     ap.add_argument("--max-turns", type=int, default=40)
     ap.add_argument("--instance", default="wb")
@@ -112,7 +116,7 @@ def main():
     paths = [p for spec in a.runs.split(",") if spec for p in glob.glob(spec)] or sorted(
         glob.glob(os.path.join(os.path.dirname(__file__), "..", "metrics", "runs", "*-run-*.json"))
     )
-    cases = collect(paths, set(a.kinds.split(",")), a.max_cases)
+    cases = collect(paths, set(a.kinds.split(",")), a.max_cases, a.min_floor)
     configs = {
         c: parse_config(c) for c in (a.config or ["turns=2,beam=5,maxNodes=800", "turns=2,beam=8,maxNodes=2500"])
     }
