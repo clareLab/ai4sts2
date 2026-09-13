@@ -177,7 +177,7 @@ public static class HarnessOps
             run = await game.StartNewSingleplayerRun(
                 models[0],
                 false,
-                ModelDb.Acts.ToList(),
+                Session.ActsFor(seed, SaveManager.Instance.GenerateUnlockStateFromProgress(), false),
                 [],
                 seed,
                 GameMode.Standard,
@@ -190,7 +190,7 @@ public static class HarnessOps
             var unlocks = SaveManager.Instance.GenerateUnlockStateFromProgress();
             run = RunState.CreateForNewRun(
                 models.Select((m, i) => Player.CreateForNewRun(m, unlocks, 1UL + (ulong)i)).ToList(),
-                ModelDb.Acts.Select(act => act.ToMutable()).ToList(),
+                Session.ActsFor(seed, unlocks, true).Select(act => act.ToMutable()).ToList(),
                 [],
                 GameMode.Standard,
                 ascension,

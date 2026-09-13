@@ -7,14 +7,17 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer;
+using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.TestSupport;
+using MegaCrit.Sts2.Core.Unlocks;
 
 namespace Ai4Sts2.Workbench;
 
@@ -102,7 +105,7 @@ public sealed class Session
             .ToList();
         var state = RunState.CreateForNewRun(
             players,
-            ModelDb.Acts.Select(a => a.ToMutable()).ToList(),
+            ActsFor(seed, unlocks, characters.Count > 1).Select(a => a.ToMutable()).ToList(),
             [],
             GameMode.Standard,
             ascension,
@@ -121,6 +124,11 @@ public sealed class Session
         }
         return state;
     }
+
+    public static List<ActModel> ActsFor(string seed, UnlockState unlocks, bool multiplayer) =>
+        ActModel
+            .GetRandomList(new Rng(StringHelper.GetDeterministicHashCode(seed), "act_selection"), unlocks, multiplayer)
+            .ToList();
 
     public CombatState StartEncounter(string encounterId, bool fullHeal)
     {
