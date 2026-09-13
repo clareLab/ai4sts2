@@ -21,6 +21,8 @@ public static class Tuning
 
     public static int HalvingAbove { get; set; } = 4;
 
+    public static bool ProbeTurnEnd { get; set; } = true;
+
     public static int FocusFire { get; set; } = 7;
 
     public static int LevelDivisor { get; set; } = 5;

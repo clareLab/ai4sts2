@@ -26,11 +26,13 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private readonly Dictionary<string, Threat> _threats = [];
     private readonly int _potionValue;
     private readonly int _blockPotionValue;
+    private readonly int[] _selfDamage;
+    private readonly int[] _plating;
     private bool _atTurnStart;
 
     private sealed record Threat(int[] Damage, double PerTurn, double HitsPerTurn, int MaxHit, int Moves);
 
-    public CombatDomain(Session session)
+    public CombatDomain(Session session, bool probe = true)
     {
         Session = session;
         var (state, _) = Session.Current(0);
@@ -56,6 +58,106 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             }
             _blockPotionValue = Math.Max(_potionValue, HpWeight * Math.Min(12, spike - Tuning.BlockPrior));
         }
+        _selfDamage = new int[state.Players.Count];
+        _plating = new int[state.Players.Count];
+        if (probe && Tuning.ProbeTurnEnd && CombatManager.Instance.IsInProgress && !Terminal)
+        {
+            ProbeTurnEnd(state);
+        }
+    }
+
+    private void ProbeTurnEnd(CombatState state)
+    {
+        var players = state.Players.ToList();
+        var attack = new int[players.Count];
+        var targets = state.PlayerCreatures;
+        foreach (var enemy in state.Enemies)
+        {
+            if (!enemy.IsAlive || enemy.Monster?.NextMove is not { } move)
+            {
+                continue;
+            }
+            foreach (var intent in move.Intents)
+            {
+                if (intent is not AttackIntent a)
+                {
+                    continue;
+                }
+                for (var p = 0; p < players.Count; p++)
+                {
+                    if (players[p].Creature.IsAlive)
+                    {
+                        using var scope = Session.ActAs(players[p]);
+                        attack[p] += a.GetTotalDamage(targets, enemy);
+                    }
+                }
+            }
+        }
+        var before = players.Select(pl => pl.Creature.CurrentHp).ToArray();
+        var block = players.Select(pl => pl.Creature.Block).ToArray();
+        for (var p = 0; p < players.Count; p++)
+        {
+            if (players[p].Creature.IsAlive && attack[p] + 5 >= before[p] + block[p])
+            {
+                return;
+            }
+        }
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var snap = Loader.Take();
+        try
+        {
+            var plain = Measure(before);
+            _ = Loader.Restore(snap, Session.Pump);
+            foreach (var player in players)
+            {
+                if (player.Creature.IsAlive)
+                {
+                    player.Creature.Block += 10_000;
+                }
+            }
+            var shielded = Measure(before);
+            for (var p = 0; p < players.Count; p++)
+            {
+                if (!players[p].Creature.IsAlive || plain[p] >= before[p] || shielded[p] >= before[p])
+                {
+                    continue;
+                }
+                var blockable = plain[p] - shielded[p];
+                var extra = blockable - Math.Max(0, attack[p] - block[p]);
+                _selfDamage[p] = Math.Max(0, extra) + shielded[p];
+                _plating[p] = Math.Max(0, -extra);
+            }
+        }
+        catch (Exception e) when (e is LeakedAwaitException or InvalidOperationException)
+        {
+            Entry.Log.Warn($"turn-end probe skipped: {e.Message}");
+        }
+        finally
+        {
+            _ = Loader.Restore(snap, Session.Pump);
+            snap.Release();
+            ProbeMicros += sw.Elapsed.TotalMicroseconds;
+            Probes++;
+        }
+    }
+
+    public static double ProbeMicros { get; private set; }
+
+    public static int Probes { get; private set; }
+
+    private int[] Measure(int[] before)
+    {
+        foreach (var action in Closing())
+        {
+            _ = Apply(action);
+        }
+        var (after, _) = Session.Current(0);
+        var loss = new int[before.Length];
+        for (var p = 0; p < before.Length && p < after.Players.Count; p++)
+        {
+            loss[p] = before[p] - after.Players[p].Creature.CurrentHp;
+        }
+        return loss;
     }
 
     private Threat ThreatOf(Creature enemy, CombatState state, Player player)
@@ -425,10 +527,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 continue;
             }
             var anticipated = _atTurnStart ? ExpectedBlock(state.Players[p]) : 0;
-            var through = Math.Max(
-                0,
-                incoming[p] + SelfDamage(creature) - creature.Block - Plating(creature) - anticipated
-            );
+            var through = Math.Max(0, incoming[p] + _selfDamage[p] - creature.Block - _plating[p] - anticipated);
             score -= through * HpWeight;
             if (through >= creature.CurrentHp)
             {
@@ -480,32 +579,6 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         foreach (var enemy in state.Enemies)
         {
             total += Math.Max(0, enemy.MaxHp - enemy.CurrentHp);
-        }
-        return total;
-    }
-
-    private static int SelfDamage(Creature creature)
-    {
-        var total = 0;
-        foreach (var power in creature.Powers)
-        {
-            if (power is DisintegrationPower)
-            {
-                total += power.Amount;
-            }
-        }
-        return total;
-    }
-
-    private static int Plating(Creature creature)
-    {
-        var total = 0;
-        foreach (var power in creature.Powers)
-        {
-            if (power is PlatingPower)
-            {
-                total += power.Amount;
-            }
         }
         return total;
     }

@@ -115,6 +115,8 @@ public static class HarnessOps
             Workbench = Switches.Applied,
             Patches = Patches.Count,
             StalePatches = Patches.Stale,
+            Probes = CombatDomain.Probes,
+            ProbeMicros = CombatDomain.ProbeMicros,
         };
 
     private static List<CardInfo> ListCards() =>

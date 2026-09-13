@@ -264,7 +264,7 @@ public static class Rollout
                     )
                 );
             }
-            var replay = new CombatDomain(session);
+            var replay = new CombatDomain(session, false);
             foreach (var action in line)
             {
                 if (!CombatManager.Instance.IsInProgress)
