@@ -29,12 +29,20 @@ public sealed record RolloutSummary(
     int Wins,
     int HpLost,
     double Score,
-    IReadOnlyList<FightSummary> Details
+    IReadOnlyList<FightSummary> Details,
+    FightSummary? Boss,
+    int BossDamage
 );
+
+public sealed record RolloutPlan(int Fights, int MaxTurns, bool Boss, int BossTurns);
 
 public sealed record RewardOptionResult(string Label, int? Card, string? Alternative, RolloutSummary Rollout);
 
 public sealed record RewardEvaluation(int Index, IReadOnlyList<RewardOptionResult> Options, string Best, double Micros);
+
+public sealed record ChoiceResult(string Label, int? Index, RolloutSummary Rollout);
+
+public sealed record ChoiceEvaluation(string Kind, IReadOnlyList<ChoiceResult> Options, string Best, double Micros);
 
 public static class Rollout
 {
@@ -87,12 +95,14 @@ public static class Rollout
         return (!CombatManager.Instance.IsInProgress && alive, turns, nodes, sw.Elapsed.TotalMicroseconds);
     }
 
-    public static RolloutSummary Fights(Session session, SearchOptions options, int fights, int maxTurns)
+    public static RolloutSummary Fights(Session session, SearchOptions options, RolloutPlan plan)
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         var details = new List<FightSummary>();
         var wins = 0;
         var lost = 0;
+        var fights = plan.Fights;
+        var maxTurns = plan.MaxTurns;
         for (var i = 0; i < fights; i++)
         {
             var encounter = run.Act.PullNextEncounter(RoomType.Monster);
@@ -110,15 +120,59 @@ public static class Rollout
             wins++;
         }
         var score = (wins * 1000) - (lost * 10) - ((fights - wins) * 5000);
-        return new RolloutSummary(fights, wins, lost, score, details);
+        FightSummary? boss = null;
+        var bossDamage = 0;
+        if (plan.Boss && wins == fights)
+        {
+            var encounter = run.Act.PullNextEncounter(RoomType.Boss);
+            var before = run.Players.Sum(p => p.Creature.CurrentHp);
+            var state = session.StartEncounter(encounter.Id.Entry, true);
+            var bossMax = state.Enemies.Sum(e => e.MaxHp);
+            var (won, turns, nodes, micros) = PlayCombat(session, options, plan.BossTurns);
+            var after = run.Players.Sum(p => p.Creature.CurrentHp);
+            var remaining = state.Enemies.Where(e => e.IsAlive).Sum(e => e.CurrentHp);
+            bossDamage = bossMax - remaining;
+            boss = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
+            var alive = run.Players.Any(p => p.Creature.IsAlive);
+            score += (bossDamage * 3) - (Math.Max(0, before - after) * 6) + (won ? 3000 : 0) - (alive ? 0 : 4000);
+        }
+        return new RolloutSummary(fights, wins, lost, score, details, boss, bossDamage);
+    }
+
+    public static ChoiceEvaluation EvaluateChoices(
+        Session session,
+        string kind,
+        IReadOnlyList<(string Label, int? Index, Action Apply)> choices,
+        SearchOptions options,
+        RolloutPlan plan
+    )
+    {
+        var sw = Stopwatch.StartNew();
+        var root = Loader.Take();
+        var results = new List<ChoiceResult>();
+        try
+        {
+            foreach (var (label, index, apply) in choices)
+            {
+                apply();
+                results.Add(new ChoiceResult(label, index, Fights(session, options, plan)));
+                _ = Loader.Restore(root, session.Pump);
+            }
+        }
+        finally
+        {
+            _ = Loader.Restore(root, session.Pump);
+            root.Release();
+        }
+        var best = results.OrderByDescending(r => r.Rollout.Score).First().Label;
+        return new ChoiceEvaluation(kind, results, best, sw.Elapsed.TotalMicroseconds);
     }
 
     public static RewardEvaluation EvaluateCardReward(
         Session session,
         int rewardIndex,
         SearchOptions options,
-        int fights,
-        int maxTurns
+        RolloutPlan plan
     )
     {
         var sw = Stopwatch.StartNew();
@@ -142,7 +196,7 @@ public static class Rollout
                 {
                     _ = session.Flow.TakeRewardUnsynchronized(rewardIndex, card, alternative);
                 }
-                var summary = Fights(session, options, fights, maxTurns);
+                var summary = Fights(session, options, plan);
                 results.Add(new RewardOptionResult(label, card, alternative, summary));
                 _ = Loader.Restore(root, session.Pump);
             }

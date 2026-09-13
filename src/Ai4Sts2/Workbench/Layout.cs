@@ -32,6 +32,8 @@ public sealed class SnapReader
     public List<object?> Refs { get; init; } = [];
 
     public int RefPos { get; set; }
+
+    public Dictionary<object, object>? Remap { get; init; }
 }
 
 public static class SnapIo
@@ -130,7 +132,13 @@ public static class SnapIo
         return v;
     }
 
-    public static object? RR(SnapReader r) => r.Refs[r.RefPos++];
+    public static object? RR(SnapReader r)
+    {
+        var value = r.Refs[r.RefPos++];
+        return value is not null && r.Remap is { } remap && remap.TryGetValue(value, out var replacement)
+            ? replacement
+            : value;
+    }
 }
 
 public sealed class Layout
@@ -257,7 +265,11 @@ public sealed class Layout
         {
             list.AddRange(
                 t.GetFields(Declared)
-                    .Where(f => !Snapshot.Skip(f.FieldType) && !f.FieldType.IsPointer && !f.FieldType.IsByRefLike)
+                    .Where(f =>
+                        (Snapshot.IsSource(f.FieldType) || !Snapshot.Skip(f.FieldType))
+                        && !f.FieldType.IsPointer
+                        && !f.FieldType.IsByRefLike
+                    )
             );
         }
         return list.ToArray();

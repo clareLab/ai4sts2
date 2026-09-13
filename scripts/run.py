@@ -85,15 +85,41 @@ def handle_treasure(wb, entry):
     entry["treasure"] = {"gold": gold, "offered": relics, "picked": res.get("picked")}
 
 
+def plan_args(a):
+    return {
+        "fights": a.fights,
+        "maxTurns": a.max_turns,
+        "maxNodes": a.max_nodes,
+        "maxDepth": a.max_depth,
+        "leaf": "estimate",
+        "beam": a.beam,
+        "boss": a.boss,
+        "bossTurns": a.boss_turns,
+    }
+
+
 def handle_shop(wb, a, entry):
     v = wb.call("wb.view")["view"]
     bought = []
-    removal = next((e for e in v["shop"] if e["kind"] == "removal" and e["stocked"] and e["affordable"]), None)
-    if removal is not None:
-        deck = wb.call("run.state")["players"][0]["deck"]
-        idx = next((i for i, c in enumerate(deck) if c["id"] == "STRIKE_IRONCLAD" and not c.get("upgrade")), None)
-        if idx is not None and wb.call("wb.remove", {"deck": idx})["ok"]:
-            bought.append({"kind": "removal", "card": deck[idx]["id"], "cost": removal["cost"]})
+    evaluations = []
+    for _ in range(3):
+        ev = wb.call("wb.evalshop", plan_args(a))["evaluation"]
+        evaluations.append(ev)
+        best = next(o for o in ev["options"] if o["label"] == ev["best"])
+        if best.get("index") is None:
+            break
+        shop = wb.call("wb.view")["view"]["shop"]
+        e = shop[best["index"]]
+        if e["kind"] == "removal":
+            deck = wb.call("run.state")["players"][0]["deck"]
+            idx = next((i for i, c in enumerate(deck) if c["id"].startswith("STRIKE") and not c.get("upgrade")), None)
+            ok = idx is not None and wb.call("wb.remove", {"deck": idx})["ok"]
+        else:
+            ok = wb.call("wb.buy", {"index": e["index"]})["ok"]
+        if not ok:
+            break
+        bought.append({"kind": e["kind"], "id": e.get("id"), "cost": e["cost"], "label": best["label"]})
+    entry["shopEvaluations"] = evaluations
     for e in sorted((e for e in v["shop"] if e["kind"] == "potion" and e["stocked"]), key=lambda e: e["cost"]):
         state = wb.call("run.state")["players"][0]
         affordable = e["cost"] <= state["gold"] and any(p is None for p in state["potions"])
@@ -108,18 +134,7 @@ def take_rewards(wb, a, entry):
     for set_view in view["rewards"]:
         for reward in set_view["rewards"]:
             if reward["kind"] == "card":
-                ev = wb.call(
-                    "wb.evalreward",
-                    {
-                        "index": reward["index"],
-                        "fights": a.fights,
-                        "maxTurns": a.max_turns,
-                        "maxNodes": a.max_nodes,
-                        "maxDepth": a.max_depth,
-                        "leaf": "estimate",
-                        "beam": a.beam,
-                    },
-                )["evaluation"]
+                ev = wb.call("wb.evalreward", {"index": reward["index"], **plan_args(a)})["evaluation"]
                 entry["evaluation"] = ev
                 best = next(o for o in ev["options"] if o["label"] == ev["best"])
                 if best.get("card") is not None:
@@ -190,8 +205,14 @@ def play_run(wb, a, seed):
         elif v["restOptions"]:
             wanted = "HEAL" if me["hp"] < me["maxHp"] * 0.6 else "SMITH"
             option = next((o for o in v["restOptions"] if o.upper() == wanted), v["restOptions"][0])
+            if option.upper() == "SMITH":
+                ev = wb.call("wb.evalsmith", plan_args(a))["evaluation"]
+                entry["evaluation"] = ev
+                best = next(o for o in ev["options"] if o["label"] == ev["best"])
+                if best.get("index") is not None:
+                    wb.call("selector.enqueue", {"choice": [best["index"]]})
             res = wb.call("wb.rest", {"option": option})
-            entry["rest"] = {"option": option, "ok": res["ok"]}
+            entry["rest"] = {"option": option, "ok": res["ok"], "upgraded": entry.get("evaluation", {}).get("best")}
         after = wb.call("run.state")["players"][0]
         entry["hpAfter"] = after["hp"]
         entry["deckSize"] = len(after["deck"])
@@ -210,7 +231,7 @@ def play_run(wb, a, seed):
                 else ""
             )
             + (f"  took {[t.get('card') or t.get('value') for t in entry['taken']]}" if entry.get("taken") else "")
-            + (f"  rest {entry['rest']['option']}" if entry.get("rest") else "")
+            + (f"  rest {entry['rest']['option']} {entry['rest'].get('upgraded') or ''}" if entry.get("rest") else "")
             + (f"  event {entry['event']['chosen']}" if entry.get("event") else "")
             + (f"  relic {entry['treasure']['picked']}" if entry.get("treasure") else "")
             + (f"  shop {[b.get('id') or b.get('card') for b in entry['shop']['bought']]}" if entry.get("shop") else "")
@@ -248,7 +269,9 @@ def main():
     ap.add_argument("--max-turns", type=int, default=30)
     ap.add_argument("--beam", type=int, default=3)
     ap.add_argument("--turns", type=int, default=1)
-    ap.add_argument("--fights", type=int, default=3)
+    ap.add_argument("--fights", type=int, default=2)
+    ap.add_argument("--boss", action="store_true")
+    ap.add_argument("--boss-turns", type=int, default=6)
     a = ap.parse_args()
     a.character = a.character.upper()
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
@@ -281,6 +304,8 @@ def main():
             "beam": a.beam,
             "turns": a.turns,
             "fights": a.fights,
+            "boss": a.boss,
+            "bossTurns": a.boss_turns,
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
             "floors": sum(c["floors"] for c in cases),

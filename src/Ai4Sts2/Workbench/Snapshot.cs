@@ -8,6 +8,7 @@ public sealed class Snapshot
     private enum Shape
     {
         Leaf,
+        Source,
         Model,
         Reference,
     }
@@ -23,8 +24,11 @@ public sealed class Snapshot
     [ThreadStatic]
     private static Stack<Snapshot>? _pool;
 
+    private static readonly Dictionary<Type, Func<object, bool>> _completed = [];
+
     private readonly List<(object Target, Layout Layout, int DataPos, int RefPos)> _objects = new(1024);
     private readonly List<(Array Target, Array Copy)> _arrays = new(256);
+    private readonly List<(object Source, bool WasCompleted)> _sources = [];
     private readonly SnapWriter _writer = new();
     private int _arrayCursor;
 
@@ -76,7 +80,7 @@ public sealed class Snapshot
                     }
                     var start = w.Refs.Count;
                     layout.CaptureArray!(array, w);
-                    Discover(w, start, seen, stack);
+                    snap.Discover(w, start, seen, stack);
                     w.Refs.RemoveRange(start, w.Refs.Count - start);
                     continue;
                 }
@@ -84,13 +88,13 @@ public sealed class Snapshot
                 {
                     for (var i = 0; i < items.Length; i++)
                     {
-                        Consider(items[i], seen, stack);
+                        snap.Consider(items[i], seen, stack);
                     }
                     continue;
                 }
                 foreach (var item in array)
                 {
-                    Consider(item, seen, stack);
+                    snap.Consider(item, seen, stack);
                 }
                 continue;
             }
@@ -99,7 +103,7 @@ public sealed class Snapshot
             snap._objects.Add((obj, l, w.Pos, refStart));
             l.Capture(obj, w);
             snap.Fields += l.Fields;
-            Discover(w, refStart, seen, stack);
+            snap.Discover(w, refStart, seen, stack);
         }
         snap._arrays.RemoveRange(snap._arrayCursor, snap._arrays.Count - snap._arrayCursor);
         snap.Elapsed = sw.Elapsed;
@@ -115,8 +119,25 @@ public sealed class Snapshot
         }
     }
 
+    public static bool IsSource(Type t) =>
+        t == typeof(TaskCompletionSource)
+        || (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(TaskCompletionSource<>));
+
+    private static bool IsCompleted(object source)
+    {
+        var type = source.GetType();
+        if (!_completed.TryGetValue(type, out var probe))
+        {
+            var property = type.GetProperty("Task")!;
+            probe = o => ((Task)property.GetValue(o)!).IsCompleted;
+            _completed[type] = probe;
+        }
+        return probe(source);
+    }
+
     private void Reset()
     {
+        _sources.Clear();
         _objects.Clear();
         _writer.Pos = 0;
         _writer.Refs.Clear();
@@ -142,14 +163,41 @@ public sealed class Snapshot
         _arrays.Add((array, (Array)array.Clone()));
     }
 
+    public int Replaced { get; private set; }
+
     public TimeSpan Restore()
     {
         var sw = Stopwatch.StartNew();
+        Dictionary<object, object>? remap = null;
+        foreach (var (source, wasCompleted) in _sources)
+        {
+            if (!wasCompleted && IsCompleted(source))
+            {
+                remap ??= new Dictionary<object, object>(ReferenceEqualityComparer.Instance);
+                remap[source] = Activator.CreateInstance(source.GetType())!;
+            }
+        }
+        Replaced = remap?.Count ?? 0;
         foreach (var (target, copy) in _arrays)
         {
             Array.Copy(copy, target, copy.Length);
+            if (remap is not null && target is object?[] items)
+            {
+                for (var i = 0; i < items.Length; i++)
+                {
+                    if (items[i] is { } item && remap.TryGetValue(item, out var replacement))
+                    {
+                        items[i] = replacement;
+                    }
+                }
+            }
         }
-        var reader = new SnapReader { Data = _writer.Data, Refs = _writer.Refs };
+        var reader = new SnapReader
+        {
+            Data = _writer.Data,
+            Refs = _writer.Refs,
+            Remap = remap,
+        };
         foreach (var (target, layout, dataPos, refPos) in _objects)
         {
             reader.Pos = dataPos;
@@ -171,7 +219,7 @@ public sealed class Snapshot
             || typeof(Godot.GodotObject).IsAssignableFrom(t);
     }
 
-    private static void Discover(SnapWriter w, int start, HashSet<object> seen, Stack<object> stack)
+    private void Discover(SnapWriter w, int start, HashSet<object> seen, Stack<object> stack)
     {
         var refs = w.Refs;
         for (var i = start; i < refs.Count; i++)
@@ -187,21 +235,30 @@ public sealed class Snapshot
             return entry;
         }
         var shape =
-            t == typeof(string) || typeof(Delegate).IsAssignableFrom(t) || Skip(t) ? Shape.Leaf
+            IsSource(t) ? Shape.Source
+            : t == typeof(string) || typeof(Delegate).IsAssignableFrom(t) || Skip(t) ? Shape.Leaf
             : typeof(AbstractModel).IsAssignableFrom(t) ? Shape.Model
             : Shape.Reference;
-        entry = (shape, shape == Shape.Leaf || t.IsArray ? null : Layout.For(t));
+        entry = (shape, shape is Shape.Leaf or Shape.Source || t.IsArray ? null : Layout.For(t));
         _shapes[t] = entry;
         return entry;
     }
 
-    private static void Consider(object? value, HashSet<object> seen, Stack<object> stack)
+    private void Consider(object? value, HashSet<object> seen, Stack<object> stack)
     {
         if (value is null or string)
         {
             return;
         }
         var (shape, _) = ShapeOf(value.GetType());
+        if (shape == Shape.Source)
+        {
+            if (seen.Add(value))
+            {
+                _sources.Add((value, IsCompleted(value)));
+            }
+            return;
+        }
         if (shape == Shape.Leaf || (shape == Shape.Model && ((AbstractModel)value).IsCanonical))
         {
             return;

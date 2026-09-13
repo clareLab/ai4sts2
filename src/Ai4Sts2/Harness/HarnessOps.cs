@@ -8,11 +8,13 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
@@ -74,6 +76,7 @@ public static class HarnessOps
             "wb.take" => Result(WorkbenchTake(request.Args)),
             "wb.skip" => Result(WorkbenchSkip()),
             "wb.rest" => Result(WorkbenchRest(request.Args)),
+            "selector.enqueue" => Result(SelectorEnqueue(request.Args)),
             "wb.event" => Result(WorkbenchEvent(request.Args)),
             "wb.proceed" => Result(WorkbenchProceed()),
             "wb.chest" => Result(WorkbenchChest()),
@@ -82,6 +85,8 @@ public static class HarnessOps
             "wb.remove" => Result(WorkbenchRemove(request.Args)),
             "wb.nextact" => Result(WorkbenchNextAct()),
             "wb.evalreward" => Result(WorkbenchEvalReward(request.Args)),
+            "wb.evalsmith" => Result(WorkbenchEvalSmith(request.Args)),
+            "wb.evalshop" => Result(WorkbenchEvalShop(request.Args)),
             "wb.autoplay" => Result(WorkbenchAutoplay(request.Args)),
             _ => throw new NotSupportedException($"unknown op '{request.Op}'"),
         };
@@ -394,6 +399,14 @@ public static class HarnessOps
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
 
+    private static object SelectorEnqueue(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var choice = a.GetProperty("choice").EnumerateArray().Select(c => c.GetInt32()).ToArray();
+        Session.Instance.Selector.Enqueue(choice);
+        return new { Queued = choice };
+    }
+
     private static object WorkbenchEvent(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
@@ -458,19 +471,102 @@ public static class HarnessOps
         return new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns);
     }
 
+    private static RolloutPlan PlanFrom(JsonElement a)
+    {
+        var fights = a.TryGetProperty("fights", out var f) ? f.GetInt32() : 3;
+        var maxTurns = a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
+        var boss = a.TryGetProperty("boss", out var b) && b.GetBoolean();
+        var bossTurns = a.TryGetProperty("bossTurns", out var bt) ? bt.GetInt32() : 6;
+        return new RolloutPlan(fights, maxTurns, boss, bossTurns);
+    }
+
     private static object WorkbenchEvalReward(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var fights = a.TryGetProperty("fights", out var f) ? f.GetInt32() : 3;
-        var maxTurns = a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var evaluation = Rollout.EvaluateCardReward(
             Session.Instance,
             a.GetProperty("index").GetInt32(),
             SearchOptionsFrom(a),
-            fights,
-            maxTurns
+            PlanFrom(a)
         );
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchEvalSmith(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var session = Session.Instance;
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var player = LocalContext.GetMe(run)!;
+        var deck = player.Deck.Cards;
+        var choices = new List<(string Label, int? Index, Action Apply)>();
+        var seen = new HashSet<string>();
+        for (var i = 0; i < deck.Count; i++)
+        {
+            var card = deck[i];
+            var key = $"{card.Id.Entry}+{card.CurrentUpgradeLevel}";
+            if (!card.IsUpgradable || !seen.Add(key))
+            {
+                continue;
+            }
+            var index = i;
+            choices.Add((key, index, new Action(() => CardCmd.Upgrade(deck[index], CardPreviewStyle.None))));
+        }
+        var evaluation = Rollout.EvaluateChoices(session, "smith", choices, SearchOptionsFrom(a), PlanFrom(a));
+        return new { Evaluation = evaluation, View = session.Flow.View() };
+    }
+
+    private static object WorkbenchEvalShop(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var session = Session.Instance;
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        if (run.CurrentRoom is not MerchantRoom merchant)
+        {
+            throw new InvalidOperationException("not in a shop");
+        }
+        var inventory = merchant.GetLocalInventory();
+        var player = inventory.Player;
+        var choices = new List<(string Label, int? Index, Action Apply)> { ("Nothing", null, new Action(() => { })) };
+        var entries = inventory.AllEntries.ToList();
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var index = i;
+            var entry = entries[i];
+            if (!entry.IsStocked || !entry.EnoughGold || entry is MerchantPotionEntry)
+            {
+                continue;
+            }
+            if (entry is MerchantCardRemovalEntry)
+            {
+                var strike = player
+                    .Deck.Cards.ToList()
+                    .FindIndex(c =>
+                        c.Id.Entry.StartsWith("STRIKE", StringComparison.Ordinal) && c.CurrentUpgradeLevel == 0
+                    );
+                if (strike < 0)
+                {
+                    continue;
+                }
+                choices.Add(
+                    (
+                        $"Remove {player.Deck.Cards[strike].Id.Entry}",
+                        index,
+                        new Action(() => session.Flow.RemoveCard(strike))
+                    )
+                );
+                continue;
+            }
+            var label = entry switch
+            {
+                MerchantCardEntry card => card.CreationResult?.Card.Id.Entry ?? "card",
+                MerchantRelicEntry relic => relic.Model?.Id.Entry ?? "relic",
+                _ => entry.GetType().Name,
+            };
+            choices.Add((label, index, new Action(() => session.Flow.Buy(index))));
+        }
+        var evaluation = Rollout.EvaluateChoices(session, "shop", choices, SearchOptionsFrom(a), PlanFrom(a));
+        return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
     private static object WorkbenchAutoplay(JsonElement? args)
