@@ -38,6 +38,8 @@ def autoplay(wb, a, hard=False):
             "beam": a.boss_beam if hard else a.beam,
             "turns": a.boss_turns_search if hard else a.turns,
             "escalate": a.escalate,
+            "diversify": not a.no_diversify,
+            "canonical": not a.no_canonical,
         },
     )
 
@@ -65,6 +67,8 @@ def handle_event(wb, a, entry):
             break
         pick = options[0]
         try:
+            if a.no_event_eval:
+                raise StopIteration
             ev = wb.call(
                 "wb.evalevent", {"maxTurns": a.max_turns, "maxNodes": a.max_nodes, "beam": a.beam, "turns": 1}
             )["evaluation"]
@@ -74,6 +78,8 @@ def handle_event(wb, a, entry):
                 chosen.append("leave")
                 break
             pick = next(o for o in options if o["index"] == best["col"])
+        except StopIteration:
+            pass
         except HarnessError as e:
             entry.setdefault("eventEvaluations", []).append({"error": str(e)[:300]})
             chosen.append("leave (evaluation failed)")
@@ -116,6 +122,8 @@ def plan_args(a):
         "beam": a.beam,
         "boss": a.boss,
         "bossTurns": a.boss_turns,
+        "diversify": not a.no_diversify,
+        "canonical": not a.no_canonical,
     }
 
 
@@ -309,6 +317,9 @@ def main():
     ap.add_argument("--boss-beam", type=int, default=5)
     ap.add_argument("--boss-turns-search", type=int, default=2)
     ap.add_argument("--escalate", type=float, default=0.0)
+    ap.add_argument("--no-diversify", action="store_true")
+    ap.add_argument("--no-canonical", action="store_true")
+    ap.add_argument("--no-event-eval", action="store_true")
     ap.add_argument("--fights", type=int, default=2)
     ap.add_argument("--instance", default="wb")
     ap.add_argument("--paths", action="store_true")
