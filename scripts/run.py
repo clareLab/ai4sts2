@@ -195,7 +195,10 @@ def take_rewards(wb, a, entry):
 
 def play_run(wb, a, seed):
     t0 = time.time()
-    run = wb.call("wb.run", {"character": a.character, "players": a.players, "seed": seed, "ascension": 0, "map": True})
+    run = wb.call(
+        "wb.run",
+        {"character": a.character, "players": a.players, "seed": seed, "ascension": 0, "map": True, "net": a.net},
+    )
     floors = []
     outcome = "running"
     for _ in range(a.max_floors):
@@ -328,6 +331,7 @@ def main():
     ap.add_argument("--no-event-eval", action="store_true")
     ap.add_argument("--fights", type=int, default=2)
     ap.add_argument("--instance", default="wb")
+    ap.add_argument("--net", choices=["host", "single"], default="host")
     ap.add_argument("--paths", action="store_true")
     ap.add_argument("--boss", action="store_true")
     ap.add_argument("--boss-turns", type=int, default=6)
@@ -357,6 +361,7 @@ def main():
         {
             "character": a.character,
             "players": a.players,
+            "net": a.net,
             "seeds": seeds,
             "maxNodes": a.max_nodes,
             "maxDepth": a.max_depth,

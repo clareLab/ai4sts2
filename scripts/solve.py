@@ -71,7 +71,7 @@ def verify_on_oracle(dev, character, players, seed, encounter, cards, potions, r
 
 def solve_case(wb, dev, a, seed, encounter, cards, potions):
     t0 = time.time()
-    wb.call("wb.run", {"character": a.character, "players": a.players, "seed": seed, "ascension": 0})
+    wb.call("wb.run", {"character": a.character, "players": a.players, "seed": seed, "ascension": 0, "net": a.net})
     if cards:
         wb.call("deck.set", {"cards": cards})
     if potions:
@@ -79,7 +79,14 @@ def solve_case(wb, dev, a, seed, encounter, cards, potions):
     rng_start = wb.call("run.state")["rng"]
     start = wb.call(
         "wb.start",
-        {"character": a.character, "players": a.players, "seed": seed, "encounter": encounter, "heal": True},
+        {
+            "character": a.character,
+            "players": a.players,
+            "seed": seed,
+            "encounter": encounter,
+            "heal": True,
+            "net": a.net,
+        },
     )
     state = start["state"]
     trace = {
@@ -188,6 +195,7 @@ def main():
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--instance", default="wb")
     ap.add_argument("--joint", action="store_true")
+    ap.add_argument("--net", choices=["host", "single"], default="single")
     ap.add_argument("--leaf", choices=["exact", "estimate"], default="exact")
     ap.add_argument("--beam", type=int, default=3)
     ap.add_argument("--turns", type=int, default=1)
