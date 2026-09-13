@@ -589,15 +589,16 @@ tr.best td { background: var(--s1-wash); }
     if (r.kind === "models") return `${r.cards} 张牌 · ${r.encounters} 个遭遇`;
     if (r.kind === "run") return `${r.seeds.length} 种子 · ${r.floors} 层 · 通关 ${r.cleared} · 阵亡 ${r.died} · ${fmt(r.wallSeconds, 0)} s`;
     if (r.kind === "pair") return `${r.fights} 场 · A 胜 ${r.winsA} / HP ${r.hpA} · B 胜 ${r.winsB} / HP ${r.hpB} · 更差 ${(r.worse || []).length} 更好 ${(r.better || []).length}`;
+    if (r.kind === "bosslab") return `${r.cases} 场 ${esc(r.kinds)} · 原始胜 ${r.originalWins} · ${Object.keys(r.configs || {}).map((c) => `${esc(c)} 胜 ${r.wins[c]}`).join(" · ")}`;
     return "";
   }
-  const KINDS = { diff: "差分", solve: "自对弈", run: "整局", pair: "配对对比", bench: "Bench", warmup: "热身", models: "模型快照" };
+  const KINDS = { diff: "差分", solve: "自对弈", run: "整局", pair: "配对对比", bosslab: "Boss 实验", bench: "Bench", warmup: "热身", models: "模型快照" };
   const ROOM_TEXT = { Monster: "普通战", Elite: "精英", Boss: "Boss", RestSite: "篝火", Shop: "商店", Treasure: "宝箱", Unknown: "未知", Ancient: "远古", Unassigned: "起点" };
 
   function pageRuns(route, f) {
     const kind = route.q.get("kind") || "all";
     const rows = inWindow(inVersion(store.index, f).filter((r) => kind === "all" || r.kind === kind), f).slice().reverse();
-    const tabs = ["all", "diff", "solve", "run", "pair", "bench", "warmup", "models"].map((k) => `<a href="${href("/runs", f, { kind: k === "all" ? null : k })}" aria-current="${k === kind}">${k === "all" ? "全部" : KINDS[k]}</a>`).join("");
+    const tabs = ["all", "diff", "solve", "run", "pair", "bosslab", "bench", "warmup", "models"].map((k) => `<a href="${href("/runs", f, { kind: k === "all" ? null : k })}" aria-current="${k === kind}">${k === "all" ? "全部" : KINDS[k]}</a>`).join("");
     const body = rows.map((r) => `<tr><td class="muted"><a href="${href("/run/" + r.id, f)}">${short(r.ts)}</a></td><td>${KINDS[r.kind] || esc(r.kind)}</td><td>${runSummaryCells(r, f)}</td><td class="id">${esc(r.game || "?")}</td><td class="id"><a href="${href("/run/" + r.id, f)}">${esc(r.id)}</a></td></tr>`).join("");
     return `${filterBar(route, f)}<div class="panel"><header><h2>运行记录</h2><div class="cap"><span class="seg">${tabs}</span><span>窗口内 ${rows.length} 条</span></div></header><div class="tablewrap"><table><thead><tr><th>时间</th><th>类型</th><th>摘要</th><th>游戏版本</th><th>ID</th></tr></thead><tbody>${body || `<tr><td colspan="5" class="empty">没有记录</td></tr>`}</tbody></table></div></div>`;
   }
@@ -665,6 +666,14 @@ tr.best td { background: var(--s1-wash); }
       const params = kv([["角色", esc(r.character)], ["遭遇", r.encounters.map((e) => `<a href="${href("/encounter/" + e, f)}">${esc(e)}</a>`).join(", ")], ["种子", r.seeds.map(esc).join(", ")], ["卡组", r.deck.length ? r.deck.length + " 张" : "起始卡组"], ["药水", (r.potions || []).map(human).map(esc).join(", ") || "无"], ["A", esc(cfg(r.configs.a))], ["B", esc(cfg(r.configs.b))], ["A 战绩", `胜 ${r.winsA}/${r.fights} · 总 HP ${r.hpA} · ${fmt(r.millisA / 1000, 1)} s`], ["B 战绩", `胜 ${r.winsB}/${r.fights} · 总 HP ${r.hpB} · ${fmt(r.millisB / 1000, 1)} s`], ["B 更差 (≥10 HP)", (r.worse || []).map(esc).join(", ") || "无"], ["B 更好 (≥10 HP)", (r.better || []).map(esc).join(", ") || "无"], ["耗时", `${fmt(r.wallSeconds, 0)} s`]]);
       const body = rows.map((x) => `<tr><td class="id"><a href="${href("/encounter/" + x.encounter, f)}">${esc(human(x.encounter))}</a></td><td class="id">${esc(x.seed)}</td><td>${x.a.won ? "胜" : "负"}</td><td class="num">${x.a.hp}</td><td class="num">${x.a.turns}</td><td class="num">${fmt(x.a.nodes)}</td><td class="num">${fmt(x.a.millis, 0)}</td><td>${x.b.won ? "胜" : "负"}</td><td class="num">${x.b.hp}</td><td class="num">${x.b.turns}</td><td class="num">${fmt(x.b.nodes)}</td><td class="num">${fmt(x.b.millis, 0)}</td><td class="num"><b>${x.b.hp - x.a.hp > 0 ? "+" : ""}${x.b.hp - x.a.hp}</b></td></tr>`).join("");
       return `${head}<div class="row2"><div class="panel"><header><h2>参数</h2></header>${params}</div><div class="panel"><header><h2>记录</h2></header>${meta}</div></div><div class="panel"><header><h2>逐场对比</h2><div class="cap">同一卡组同一种子，A 与 B 各打一次</div></header><div class="tablewrap"><table><thead><tr><th>遭遇</th><th>种子</th><th>A</th><th class="num">HP</th><th class="num">回合</th><th class="num">节点</th><th class="num">ms</th><th>B</th><th class="num">HP</th><th class="num">回合</th><th class="num">节点</th><th class="num">ms</th><th class="num">ΔHP</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+    }
+    if (r.kind === "bosslab") {
+      const rows = (run && run.detail && run.detail.rows) || r.rows || [];
+      const names = Object.keys(r.configs || {});
+      const params = kv([["房间类型", esc(r.kinds)], ["场数", r.cases], ["原始胜场", r.originalWins], ...names.map((n) => [esc(n), `胜 ${r.wins[n]}/${r.cases} · 总 HP ${r.hp[n]} · ${fmt(r.millis[n] / 1000, 1)} s`]), ["耗时", `${fmt(r.wallSeconds, 0)} s`]]);
+      const headCells = names.map((n) => `<th>${esc(n)}</th><th class="num">HP</th><th class="num">回合</th><th class="num">ms</th>`).join("");
+      const body = rows.map((x) => `<tr><td class="id">${esc(x.seed)}</td><td class="num">${x.floor}</td><td class="id"><a href="${href("/encounter/" + x.encounter, f)}">${esc(human(x.encounter))}</a></td><td class="num">${x.hp}/${x.maxHp}</td><td class="num">${x.deckSize}</td><td>${x.original.won ? "胜" : "负"}</td>${names.map((n) => { const c = x.results[n] || {}; return `<td>${c.error ? "错误" : c.won ? "胜" : "负"}</td><td class="num">${c.hp ?? "–"}</td><td class="num">${c.turns ?? "–"}</td><td class="num">${fmt(c.millis, 0)}</td>`; }).join("")}</tr>`).join("");
+      return `${head}<div class="row2"><div class="panel"><header><h2>参数</h2></header>${params}</div><div class="panel"><header><h2>记录</h2></header>${meta}</div></div><div class="panel"><header><h2>逐场重打</h2><div class="cap">从整局记录的入场状态（卡组/遗物/药水/HP）重打同一场</div></header><div class="tablewrap"><table><thead><tr><th>种子</th><th class="num">层</th><th>遭遇</th><th class="num">HP</th><th class="num">卡组</th><th>原始</th>${headCells}</tr></thead><tbody>${body}</tbody></table></div></div>`;
     }
     if (r.kind === "bench") {
       const res = (run && run.detail && run.detail.result) || r.result;
