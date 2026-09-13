@@ -31,6 +31,8 @@ public sealed class Session
 
     public ScriptSelector Selector { get; } = new();
 
+    public Dictionary<string, int> CardPlays { get; } = [];
+
     public RunState? Run { get; private set; }
 
     public CombatRoom? Room { get; private set; }

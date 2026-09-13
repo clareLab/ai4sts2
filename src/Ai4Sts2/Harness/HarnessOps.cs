@@ -620,7 +620,7 @@ public static class HarnessOps
         {
             var deck = player.Deck.Cards.Where(c => c.IsUpgradable).ToList();
             var seen = new HashSet<string>();
-            for (var i = 0; i < deck.Count; i++)
+            foreach (var i in SmithCandidates(session, deck))
             {
                 var key = $"{deck[i].Id.Entry}+{deck[i].CurrentUpgradeLevel}";
                 if (!seen.Add(key))
@@ -637,6 +637,22 @@ public static class HarnessOps
         return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
+    private static IEnumerable<int> SmithCandidates(Session session, List<CardModel> deck)
+    {
+        var limit = Tuning.SmithCandidates;
+        var ranked = Enumerable
+            .Range(0, deck.Count)
+            .OrderByDescending(i => session.CardPlays.GetValueOrDefault(deck[i].Id.Entry))
+            .ThenBy(i => i)
+            .ToList();
+        if (limit <= 0 || ranked.Count <= limit)
+        {
+            return ranked;
+        }
+        var cut = Math.Max(1, session.CardPlays.GetValueOrDefault(deck[ranked[limit - 1]].Id.Entry));
+        return ranked.Where((i, rank) => rank < limit || session.CardPlays.GetValueOrDefault(deck[i].Id.Entry) >= cut);
+    }
+
     private static object WorkbenchEvalSmith(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
@@ -646,7 +662,7 @@ public static class HarnessOps
         var deck = player.Deck.Cards.Where(c => c.IsUpgradable).ToList();
         var choices = new List<(string Label, int? Index, Action Apply)>();
         var seen = new HashSet<string>();
-        for (var i = 0; i < deck.Count; i++)
+        foreach (var i in SmithCandidates(session, deck))
         {
             var card = deck[i];
             var key = $"{card.Id.Entry}+{card.CurrentUpgradeLevel}";

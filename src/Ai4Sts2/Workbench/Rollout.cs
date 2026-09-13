@@ -271,6 +271,10 @@ public static class Rollout
                 {
                     break;
                 }
+                if (action.Kind == "play" && action.Card is { } played)
+                {
+                    session.CardPlays[played] = session.CardPlays.GetValueOrDefault(played) + 1;
+                }
                 _ = replay.Apply(action);
             }
             turns++;

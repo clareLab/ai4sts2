@@ -23,6 +23,8 @@ public static class Tuning
 
     public static bool ProbeTurnEnd { get; set; } = true;
 
+    public static int SmithCandidates { get; set; } = 5;
+
     public static int FocusFire { get; set; } = 7;
 
     public static int LevelDivisor { get; set; } = 5;
