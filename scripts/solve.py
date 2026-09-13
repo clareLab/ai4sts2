@@ -95,7 +95,14 @@ def solve_case(wb, dev, a, seed, encounter, cards, potions):
     while state["inProgress"] and turns < a.max_turns:
         res = wb.call(
             "wb.search",
-            {"maxNodes": a.max_nodes, "maxDepth": a.max_depth, "leaf": a.leaf, "beam": a.beam, "turns": a.turns},
+            {
+                "maxNodes": a.max_nodes,
+                "maxDepth": a.max_depth,
+                "leaf": a.leaf,
+                "beam": a.beam,
+                "turns": a.turns,
+                "coordinate": a.players > 1 and not a.joint,
+            },
         )["result"]
         line = res["line"]
         trace["searches"].append(
@@ -180,6 +187,7 @@ def main():
     ap.add_argument("--max-turns", type=int, default=40)
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--instance", default="wb")
+    ap.add_argument("--joint", action="store_true")
     ap.add_argument("--leaf", choices=["exact", "estimate"], default="exact")
     ap.add_argument("--beam", type=int, default=3)
     ap.add_argument("--turns", type=int, default=1)

@@ -46,11 +46,68 @@ public sealed record ChoiceEvaluation(string Kind, IReadOnlyList<ChoiceResult> O
 
 public static class Rollout
 {
+    public static (SearchResult<SearchAction> Result, IReadOnlyList<SearchAction> Line) SearchTurn(
+        Session session,
+        SearchOptions options,
+        bool coordinate
+    )
+    {
+        var domain = new CombatDomain(session);
+        var (state, _) = Session.Current(0);
+        if (!coordinate || state.Players.Count < 2)
+        {
+            var single = new Search<SearchAction>(domain, options).Run();
+            return (single, single.Line);
+        }
+        var root = Loader.Take();
+        var line = new List<SearchAction>();
+        SearchResult<SearchAction>? last = null;
+        var nodes = 0;
+        var micros = 0.0;
+        for (var p = 0; p < state.Players.Count; p++)
+        {
+            var player = state.Players[p];
+            if (Session.HasEnded(player) || !player.Creature.IsAlive || domain.Terminal)
+            {
+                continue;
+            }
+            domain.ActivePlayer = p;
+            var result = new Search<SearchAction>(domain, options with { Turns = 1 }).Run();
+            nodes += result.Nodes;
+            micros += result.Micros;
+            last = result;
+            foreach (var action in result.Line)
+            {
+                if (action.Kind == "end" || domain.Terminal)
+                {
+                    break;
+                }
+                _ = domain.Apply(action);
+                line.Add(action);
+            }
+        }
+        domain.ActivePlayer = null;
+        _ = Loader.Restore(root, session.Pump);
+        root.Release();
+        line.AddRange(domain.Closing());
+        var summary = last is null
+            ? new SearchResult<SearchAction>(0, 0, line, "coordinate", 1, nodes, 0, 0, 0, 0, 0, micros, 0, 0, 0, true)
+            : last with
+            {
+                Line = line,
+                Leaf = "coordinate",
+                Nodes = nodes,
+                Micros = micros,
+            };
+        return (summary, line);
+    }
+
     public static (bool Won, int Turns, int Nodes, double Micros) PlayCombat(
         Session session,
         SearchOptions options,
         int maxTurns,
-        List<TurnTrace>? trace = null
+        List<TurnTrace>? trace = null,
+        bool coordinate = true
     )
     {
         var sw = Stopwatch.StartNew();
@@ -58,9 +115,9 @@ public static class Rollout
         var nodes = 0;
         while (CombatManager.Instance.IsInProgress && turns < maxTurns)
         {
-            var result = new Search<SearchAction>(new CombatDomain(session), options).Run();
+            var (result, chosen) = SearchTurn(session, options, coordinate);
             nodes += result.Nodes;
-            var line = result.Line.Count > 0 ? result.Line : [new SearchAction("end", 0, -1, null, null)];
+            var line = chosen.Count > 0 ? chosen : [new SearchAction("end", 0, -1, null, null)];
             if (trace is not null)
             {
                 var (state, player) = Session.Current(0);

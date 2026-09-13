@@ -35,6 +35,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
 
     public Session Session { get; }
 
+    public int? ActivePlayer { get; set; }
+
     public bool Terminal => !CombatManager.Instance.IsInProgress;
 
     public IReadOnlyList<SearchAction> Actions()
@@ -46,6 +48,10 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         for (var p = 0; p < state.Players.Count; p++)
         {
             var player = state.Players[p];
+            if (ActivePlayer is { } active && active != p)
+            {
+                continue;
+            }
             if (Session.HasEnded(player) || player.PlayerCombatState is not { } pcs || !player.Creature.IsAlive)
             {
                 continue;

@@ -731,7 +731,8 @@ public static class HarnessOps
         var beam = a.TryGetProperty("beam", out var b) ? b.GetInt32() : 3;
         var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
         var options = new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns);
-        var result = new Search<SearchAction>(new CombatDomain(Session.Instance), options).Run();
+        var coordinate = a.TryGetProperty("coordinate", out var c) && c.GetBoolean();
+        var (result, _) = Rollout.SearchTurn(Session.Instance, options, coordinate);
         return new { Result = result, State = CombatDump.Capture() };
     }
 
