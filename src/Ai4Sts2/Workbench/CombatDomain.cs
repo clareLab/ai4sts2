@@ -576,17 +576,21 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     {
         var state = State();
         var players = state.Players;
+        double score = 0;
         if (Terminal)
         {
             var alive = players.Where(p => p.Creature.IsAlive).ToList();
-            if (alive.Count > 0)
+            if (alive.Count == 0)
+            {
+                var turn = players.Max(p => p.PlayerCombatState?.TurnNumber ?? 0);
+                return -1_000_000 + (turn * 2_000) + (Dealt(state) * 10);
+            }
+            if (Tuning.TerminalWin >= 1_000_000)
             {
                 return 1_000_000 + alive.Sum(p => p.Creature.CurrentHp * 100);
             }
-            var turn = players.Max(p => p.PlayerCombatState?.TurnNumber ?? 0);
-            return -1_000_000 + (turn * 2_000) + (Dealt(state) * 10);
+            score = Tuning.TerminalWin;
         }
-        double score = 0;
         if (Tuning.RatePricing)
         {
             Tempo(state);
