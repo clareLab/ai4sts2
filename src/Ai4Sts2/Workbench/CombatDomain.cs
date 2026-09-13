@@ -516,7 +516,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             {
                 continue;
             }
-            var polarity = power.GetTypeForAmount(amount) == PowerType.Debuff ? -1 : 1;
+            var polarity = weight < 0 || power.GetTypeForAmount(amount) != PowerType.Debuff ? 1 : -1;
             score += sign * polarity * Math.Min(Math.Abs(amount), cap) * weight;
         }
         return score;
