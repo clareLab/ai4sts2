@@ -178,6 +178,20 @@ def play_run(wb, a, seed):
             outcome = "stuck"
             break
         t1 = time.time()
+        path_eval = None
+        if a.paths and len(view["choices"]) > 1:
+            try:
+                path_eval = wb.call(
+                    "wb.evalpath", {"maxTurns": a.max_turns, "maxNodes": a.max_nodes, "beam": a.beam, "turns": 1}
+                )["evaluation"]
+                if path_eval.get("best"):
+                    choice = next(
+                        c
+                        for c in view["choices"]
+                        if c["col"] == path_eval["best"]["col"] and c["row"] == path_eval["best"]["row"]
+                    )
+            except HarnessError as e:
+                path_eval = {"error": str(e)[:300]}
         res = wb.call("wb.travel", {"col": choice["col"], "row": choice["row"]})
         v = res["view"]
         entry = {
@@ -189,6 +203,7 @@ def play_run(wb, a, seed):
             "model": v.get("roomModel"),
             "hpBefore": me["hp"],
             "choices": view["choices"],
+            "pathEvaluation": path_eval,
         }
         alive = True
         if v["inCombat"]:
@@ -280,6 +295,7 @@ def main():
     ap.add_argument("--boss-turns-search", type=int, default=2)
     ap.add_argument("--fights", type=int, default=2)
     ap.add_argument("--instance", default="wb")
+    ap.add_argument("--paths", action="store_true")
     ap.add_argument("--boss", action="store_true")
     ap.add_argument("--boss-turns", type=int, default=6)
     a = ap.parse_args()
@@ -315,6 +331,7 @@ def main():
             "turns": a.turns,
             "bossSearch": {"maxNodes": a.boss_nodes, "beam": a.boss_beam, "turns": a.boss_turns_search},
             "fights": a.fights,
+            "paths": a.paths,
             "boss": a.boss,
             "bossTurns": a.boss_turns,
             "patches": ping.get("patches"),

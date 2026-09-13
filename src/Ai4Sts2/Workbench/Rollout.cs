@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace Ai4Sts2.Workbench;
 
@@ -43,6 +45,20 @@ public sealed record RewardEvaluation(int Index, IReadOnlyList<RewardOptionResul
 public sealed record ChoiceResult(string Label, int? Index, RolloutSummary Rollout);
 
 public sealed record ChoiceEvaluation(string Kind, IReadOnlyList<ChoiceResult> Options, string Best, double Micros);
+
+public sealed record PathResult(
+    MapChoice Choice,
+    string? Room,
+    int Hp,
+    int Gold,
+    int Deck,
+    int Relics,
+    int Potions,
+    double Score,
+    string? Error
+);
+
+public sealed record PathEvaluation(IReadOnlyList<PathResult> Options, MapChoice? Best, double Micros);
 
 public static class Rollout
 {
@@ -244,6 +260,154 @@ public static class Rollout
         }
         var best = results.OrderByDescending(r => r.Rollout.Score).First().Label;
         return new ChoiceEvaluation(kind, results, best, sw.Elapsed.TotalMicroseconds);
+    }
+
+    public static PathEvaluation EvaluatePaths(Session session, SearchOptions options, int maxTurns)
+    {
+        var sw = Stopwatch.StartNew();
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var flow = session.Flow;
+        var choices = flow.View().Choices;
+        var root = Loader.Take();
+        var results = new List<PathResult>();
+        try
+        {
+            foreach (var choice in choices)
+            {
+                string? error = null;
+                var before = Snapshot(run);
+                try
+                {
+                    flow.Travel(choice.Col, choice.Row);
+                    ResolveRoom(session, options, maxTurns);
+                }
+                catch (Exception e) when (e is LeakedAwaitException or InvalidOperationException or ArgumentException)
+                {
+                    error = e.Message;
+                }
+                var after = Snapshot(run);
+                var alive = run.Players.All(p => p.Creature.IsAlive);
+                var score = alive ? Score(before, after) : -100_000;
+                results.Add(
+                    new PathResult(
+                        choice,
+                        flow.View().RoomModel,
+                        after.Hp,
+                        after.Gold,
+                        after.Deck,
+                        after.Relics,
+                        after.Potions,
+                        score,
+                        error
+                    )
+                );
+                _ = Loader.Restore(root, session.Pump);
+            }
+        }
+        finally
+        {
+            _ = Loader.Restore(root, session.Pump);
+            root.Release();
+        }
+        var best = results.Count > 0 ? results.OrderByDescending(r => r.Score).First().Choice : null;
+        return new PathEvaluation(results, best, sw.Elapsed.TotalMicroseconds);
+    }
+
+    private static (int Hp, int Gold, int Deck, int Relics, int Potions) Snapshot(RunState run)
+    {
+        var players = run.Players;
+        return (
+            players.Sum(p => p.Creature.CurrentHp),
+            players.Sum(p => p.Gold),
+            players.Sum(p =>
+                p.Deck.Cards.Count(c => c.Rarity != CardRarity.Basic) + p.Deck.Cards.Count(c => c.IsUpgraded)
+            ),
+            players.Sum(p => p.Relics.Count),
+            players.Sum(p => p.Potions.Count())
+        );
+    }
+
+    private static double Score(
+        (int Hp, int Gold, int Deck, int Relics, int Potions) before,
+        (int Hp, int Gold, int Deck, int Relics, int Potions) after
+    ) =>
+        ((after.Hp - before.Hp) * 10)
+        + ((after.Gold - before.Gold) * 0.6)
+        + ((after.Deck - before.Deck) * 40)
+        + ((after.Relics - before.Relics) * 120)
+        + ((after.Potions - before.Potions) * 60);
+
+    private static void ResolveRoom(Session session, SearchOptions options, int maxTurns)
+    {
+        var flow = session.Flow;
+        var run = session.Run!;
+        for (var step = 0; step < 4; step++)
+        {
+            var view = flow.View();
+            if (view.InCombat)
+            {
+                var (won, _, _, _) = PlayCombat(session, options, maxTurns);
+                if (!won)
+                {
+                    return;
+                }
+                TakeRewardsGreedy(flow);
+                if (run.CurrentRoomCount > 1)
+                {
+                    flow.Proceed();
+                    continue;
+                }
+                return;
+            }
+            if (view.Room == "EventRoom" && !view.EventFinished)
+            {
+                var option = view.EventOptions.FirstOrDefault(o => !o.Locked && !o.Proceed && !o.Chosen);
+                if (option is null)
+                {
+                    return;
+                }
+                flow.ChooseEvent(option.Index);
+                continue;
+            }
+            if (view.RestOptions.Count > 0)
+            {
+                var me = run.Players[0].Creature;
+                var wanted = me.CurrentHp < me.MaxHp * 0.6 ? "HEAL" : "SMITH";
+                var pick =
+                    view.RestOptions.FirstOrDefault(o => o.Equals(wanted, StringComparison.OrdinalIgnoreCase))
+                    ?? view.RestOptions[0];
+                _ = flow.Rest(pick);
+                return;
+            }
+            if (view.Room == "TreasureRoom")
+            {
+                _ = flow.OpenChest();
+                var relics = flow.View().TreasureRelics;
+                _ = flow.PickRelic(relics.Count > 0 ? 0 : null);
+                return;
+            }
+            return;
+        }
+    }
+
+    private static void TakeRewardsGreedy(RunFlow flow)
+    {
+        var offered = flow.OfferRewards();
+        foreach (var set in offered)
+        {
+            foreach (var reward in set.Rewards)
+            {
+                if (reward.Taken)
+                {
+                    continue;
+                }
+                _ =
+                    reward.Kind == "card"
+                        ? flow.TakeRewardUnsynchronized(reward.Index, 0, null)
+                        : flow.TakeRewardUnsynchronized(reward.Index, null, null);
+            }
+            break;
+        }
     }
 
     public static RewardEvaluation EvaluateCardReward(

@@ -87,6 +87,7 @@ public static class HarnessOps
             "wb.nextact" => Result(WorkbenchNextAct()),
             "wb.evalreward" => Result(WorkbenchEvalReward(request.Args)),
             "wb.evalsmith" => Result(WorkbenchEvalSmith(request.Args)),
+            "wb.evalpath" => Result(WorkbenchEvalPath(request.Args)),
             "wb.evalshop" => Result(WorkbenchEvalShop(request.Args)),
             "wb.autoplay" => Result(WorkbenchAutoplay(request.Args)),
             _ => throw new NotSupportedException($"unknown op '{request.Op}'"),
@@ -493,6 +494,17 @@ public static class HarnessOps
             SearchOptionsFrom(a),
             PlanFrom(a)
         );
+        return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchEvalPath(JsonElement? args)
+    {
+        var a = args ?? new JsonElement();
+        var options =
+            a.ValueKind == JsonValueKind.Object ? SearchOptionsFrom(a, 600) : new SearchOptions(600, 8, true, 4, 1);
+        var maxTurns =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
+        var evaluation = Rollout.EvaluatePaths(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
     }
 

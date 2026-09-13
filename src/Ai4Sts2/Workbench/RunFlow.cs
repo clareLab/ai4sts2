@@ -476,15 +476,17 @@ public sealed class RunFlow(Session session)
                 var top = state.rewardsStack[^1];
                 foreach (var reward in top.set.Rewards.ToList())
                 {
-                    if (reward is CardReward || reward.SuccessfullySelected)
+                    if (reward.SuccessfullySelected)
                     {
                         continue;
                     }
                     using var scope = Session.ActAs(other);
+                    session.Selector.CardReward = reward is CardReward ? (0, null) : null;
                     session.Pump.Drive(
                         () => sync.SelectRewardForPlayer(top, reward),
                         $"mirror reward for {other.NetId}"
                     );
+                    session.Selector.CardReward = null;
                 }
                 if (state.rewardsStack.Count > 0 && state.rewardsStack[^1] == top)
                 {
