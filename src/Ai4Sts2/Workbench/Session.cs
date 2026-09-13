@@ -12,6 +12,7 @@ using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.TestSupport;
 
 namespace Ai4Sts2.Workbench;
 
@@ -33,7 +34,9 @@ public sealed class Session
 
     public static Session Instance { get; } = new();
 
-    public RunState NewRun(string character, string seed, int ascension)
+    public RunState NewRun(string character, string seed, int ascension) => NewRun([character], seed, ascension);
+
+    public RunState NewRun(IReadOnlyList<string> characters, string seed, int ascension)
     {
         if (Run is not null)
         {
@@ -44,10 +47,12 @@ public sealed class Session
             _selectorScope?.Dispose();
             _selectorScope = null;
         }
-        return EnsureRun(character, seed, ascension);
+        return EnsureRun(characters, seed, ascension);
     }
 
-    public RunState EnsureRun(string character, string seed, int ascension)
+    public RunState EnsureRun(string character, string seed, int ascension) => EnsureRun([character], seed, ascension);
+
+    public RunState EnsureRun(IReadOnlyList<string> characters, string seed, int ascension)
     {
         if (Run is not null)
         {
@@ -59,11 +64,22 @@ public sealed class Session
             Switches.ApplyEarly(LocalNetId);
         }
         Switches.ApplyLate();
-        var model = ModelDb.GetById<CharacterModel>(new ModelId(ModelId.SlugifyCategory<CharacterModel>(), character));
+        TestFlags.ShouldSendResumeForRemotePlayers = characters.Count > 1;
         var unlocks = SaveManager.Instance.GenerateUnlockStateFromProgress();
-        var player = Player.CreateForNewRun(model, unlocks, LocalNetId);
+        var players = characters
+            .Select(
+                (character, i) =>
+                    Player.CreateForNewRun(
+                        ModelDb.GetById<CharacterModel>(
+                            new ModelId(ModelId.SlugifyCategory<CharacterModel>(), character)
+                        ),
+                        unlocks,
+                        LocalNetId + (ulong)i
+                    )
+            )
+            .ToList();
         var state = RunState.CreateForNewRun(
-            [player],
+            players,
             ModelDb.Acts.Select(a => a.ToMutable()).ToList(),
             [],
             GameMode.Standard,

@@ -284,7 +284,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             .Append('/')
             .Append(card.CurrentUpgradeLevel)
             .Append('/')
-            .Append(card.EnergyCost.GetResolved());
+            .Append(card.EnergyCost.GetWithModifiers(CostModifiers.Local));
         sb.Append('/').Append(card.EnergyCost.CostsX ? 'x' : '-');
         foreach (var (name, v) in card.DynamicVars)
         {

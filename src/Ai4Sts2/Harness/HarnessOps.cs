@@ -251,22 +251,31 @@ public static class HarnessOps
     private static RunDump WorkbenchRun(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var character = a.GetProperty("character").GetString()!.ToUpperInvariant();
         var seed = a.TryGetProperty("seed", out var s) ? s.GetString()! : "AI4STS2";
         var ascension = a.TryGetProperty("ascension", out var asc) ? asc.GetInt32() : 0;
-        return RunSetup.Capture(Session.Instance.NewRun(character, seed, ascension));
+        return RunSetup.Capture(Session.Instance.NewRun(Characters(a), seed, ascension));
+    }
+
+    private static List<string> Characters(JsonElement a)
+    {
+        if (a.TryGetProperty("characters", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            return list.EnumerateArray().Select(c => c.GetString()!.ToUpperInvariant()).ToList();
+        }
+        var character = a.GetProperty("character").GetString()!.ToUpperInvariant();
+        var players = a.TryGetProperty("players", out var p) ? p.GetInt32() : 1;
+        return Enumerable.Repeat(character, players).ToList();
     }
 
     private static object WorkbenchStart(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var character = a.GetProperty("character").GetString()!.ToUpperInvariant();
         var seed = a.TryGetProperty("seed", out var s) ? s.GetString()! : "AI4STS2";
         var ascension = a.TryGetProperty("ascension", out var asc) ? asc.GetInt32() : 0;
         var encounter = a.GetProperty("encounter").GetString()!.ToUpperInvariant();
         var heal = !a.TryGetProperty("heal", out var h) || h.GetBoolean();
         var session = Session.Instance;
-        var run = session.EnsureRun(character, seed, ascension);
+        var run = session.EnsureRun(Characters(a), seed, ascension);
         if (a.TryGetProperty("rng", out var rng))
         {
             RunSetup.RestoreRng(run, rng.Deserialize<Dictionary<string, RngState>>(HarnessJson.Options)!);
