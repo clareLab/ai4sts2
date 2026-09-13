@@ -16,7 +16,6 @@ using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
-using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.TestSupport;
 using MegaCrit.Sts2.Core.Unlocks;
 
@@ -112,7 +111,7 @@ public sealed class Session
         }
         Switches.ApplyLate();
         TestFlags.ShouldSendResumeForRemotePlayers = characters.Count > 1;
-        var unlocks = SaveManager.Instance.GenerateUnlockStateFromProgress();
+        var unlocks = Profile.Unlocks();
         var players = characters
             .Select(
                 (character, i) =>

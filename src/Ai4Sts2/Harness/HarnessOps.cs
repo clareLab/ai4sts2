@@ -182,7 +182,7 @@ public static class HarnessOps
             run = await game.StartNewSingleplayerRun(
                 models[0],
                 false,
-                Session.ActsFor(seed, SaveManager.Instance.GenerateUnlockStateFromProgress(), false),
+                Session.ActsFor(seed, Profile.Unlocks(), false),
                 [],
                 seed,
                 GameMode.Standard,
@@ -192,7 +192,7 @@ public static class HarnessOps
         else
         {
             TestFlags.ShouldSendResumeForRemotePlayers = true;
-            var unlocks = SaveManager.Instance.GenerateUnlockStateFromProgress();
+            var unlocks = Profile.Unlocks();
             run = RunState.CreateForNewRun(
                 models.Select((m, i) => Player.CreateForNewRun(m, unlocks, 1UL + (ulong)i)).ToList(),
                 Session.ActsFor(seed, unlocks, true).Select(act => act.ToMutable()).ToList(),
