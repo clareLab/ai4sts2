@@ -498,14 +498,14 @@ public static class HarnessOps
         var session = Session.Instance;
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         var player = LocalContext.GetMe(run)!;
-        var deck = player.Deck.Cards;
+        var deck = player.Deck.Cards.Where(c => c.IsUpgradable).ToList();
         var choices = new List<(string Label, int? Index, Action Apply)>();
         var seen = new HashSet<string>();
         for (var i = 0; i < deck.Count; i++)
         {
             var card = deck[i];
             var key = $"{card.Id.Entry}+{card.CurrentUpgradeLevel}";
-            if (!card.IsUpgradable || !seen.Add(key))
+            if (!seen.Add(key))
             {
                 continue;
             }

@@ -47,6 +47,8 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
     private readonly Dictionary<string, double> _table = [];
     private readonly Stopwatch _clock = new();
     private int _nodes;
+    private int _budget;
+    private bool _exhausted = true;
     private int _leaves;
     private int _transpositions;
     private int _snapshots;
@@ -79,14 +81,16 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             _snapMicros,
             _restoreMicros,
             _actMicros,
-            _nodes < options.MaxNodes
+            _exhausted
         );
     }
 
     private (double Score, IReadOnlyList<TAction> Line, double Estimated) Solve(int turn, Snapshot root)
     {
         var candidates = new List<(double Score, List<TAction> Line, bool Terminal)>();
+        _budget = _nodes + options.MaxNodes;
         var estimated = Explore(0, [], candidates, out var best);
+        _exhausted &= _nodes < _budget;
         if ((!options.Estimate && turn == options.Turns) || options.Beam <= 0 || candidates.Count == 0)
         {
             return (estimated, best, estimated);
@@ -152,7 +156,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             return known;
         }
         _nodes++;
-        var actions = depth < options.MaxDepth && _nodes < options.MaxNodes ? domain.Actions() : [];
+        var actions = depth < options.MaxDepth && _nodes < _budget ? domain.Actions() : [];
         var bestScore = double.NegativeInfinity;
         var best = bestLine;
         Snapshot? snap = null;
@@ -161,7 +165,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             snap = TakeSnapshot();
             foreach (var action in actions)
             {
-                if (_nodes >= options.MaxNodes)
+                if (_nodes >= _budget)
                 {
                     break;
                 }
