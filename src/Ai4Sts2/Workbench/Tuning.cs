@@ -25,6 +25,12 @@ public static class Tuning
 
     public static int SmithCandidates { get; set; } = 5;
 
+    public static int RemovalCandidates { get; set; } = 3;
+
+    public static int RemovalExposure { get; set; } = 2;
+
+    public static int RolloutHpFloor { get; set; } = 65;
+
     public static bool FreezeMap { get; set; } = true;
 
     public static bool Spotlight { get; set; } = true;

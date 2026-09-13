@@ -282,7 +282,10 @@ def shop_player(wb, a, slot, bought, evaluations):
         e = shop[best["index"]]
         if e["kind"] == "removal":
             deck = wb.call("run.state")["players"][slot]["deck"]
-            idx = next((i for i, c in enumerate(deck) if c["id"].startswith("STRIKE") and not c.get("upgrade")), None)
+            card, _, level = best["label"][7:].partition("+")
+            idx = next(
+                (i for i, c in enumerate(deck) if c["id"] == card and (c.get("upgrade") or 0) == int(level or 0)), None
+            )
             ok = idx is not None and wb.call("wb.remove", {"deck": idx, "player": slot})["ok"]
         else:
             ok = wb.call("wb.buy", {"index": e["index"], "player": slot})["ok"]

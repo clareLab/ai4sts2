@@ -52,6 +52,8 @@ public sealed class Session
 
     public Dictionary<string, int> CardPlays { get; } = [];
 
+    public Dictionary<CardModel, int> CardFights { get; } = [];
+
     public FightStats Fight { get; } = new();
 
     public RunState? Run { get; private set; }

@@ -37,7 +37,7 @@ public sealed record RolloutSummary(
     int BossDamage
 );
 
-public sealed record RolloutPlan(int Fights, int MaxTurns, bool Boss, int BossTurns);
+public sealed record RolloutPlan(int Fights, int MaxTurns, bool Boss, int BossTurns, int HpFloor = 0);
 
 public sealed record RewardOptionResult(string Label, int? Card, string? Alternative, RolloutSummary Rollout);
 
@@ -226,6 +226,10 @@ public static class Rollout
         var nodes = 0;
         var recording = Harness.Recorder.Active;
         var hpStart = session.Run?.Players.Sum(p => p.Creature.CurrentHp) ?? 0;
+        foreach (var card in session.Run?.Players.SelectMany(p => p.Deck.Cards) ?? [])
+        {
+            session.CardFights[card] = session.CardFights.GetValueOrDefault(card) + 1;
+        }
         var fightId = recording
             ? Harness.Recorder.BeginFight(
                 Session.Current(0).State.Encounter?.Id.Entry ?? "?",
@@ -364,6 +368,14 @@ public static class Rollout
         var lost = 0;
         var fights = plan.Fights;
         var maxTurns = plan.MaxTurns;
+        foreach (var creature in run.Players.Select(p => p.Creature))
+        {
+            var floor = creature.MaxHp * plan.HpFloor / 100;
+            if (creature.IsAlive && creature.CurrentHp < floor)
+            {
+                creature._currentHp = floor;
+            }
+        }
         for (var i = 0; i < fights; i++)
         {
             var encounter = run.Act.PullNextEncounter(RoomType.Monster);

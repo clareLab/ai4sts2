@@ -7,6 +7,7 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Debug;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
@@ -543,14 +544,46 @@ public static class HarnessOps
         );
     }
 
-    private static RolloutPlan PlanFrom(JsonElement a)
+    private static RolloutPlan PlanFrom(JsonElement a, bool deckChoice = false)
     {
         var fights = a.TryGetProperty("fights", out var f) ? f.GetInt32() : 3;
         var maxTurns = a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var boss = a.TryGetProperty("boss", out var b) && b.GetBoolean();
         var bossTurns = a.TryGetProperty("bossTurns", out var bt) ? bt.GetInt32() : 6;
-        return new RolloutPlan(fights, maxTurns, boss, bossTurns);
+        return new RolloutPlan(fights, maxTurns, boss, bossTurns, deckChoice ? Tuning.RolloutHpFloor : 0);
     }
+
+    private static IEnumerable<int> RemovalCandidates(Session session, List<CardModel> deck)
+    {
+        var exposure = deck.GroupBy(c => c.Id.Entry)
+            .ToDictionary(g => g.Key, g => g.Sum(c => session.CardFights.GetValueOrDefault(c)));
+        var seen = new HashSet<string>();
+        return Enumerable
+            .Range(0, deck.Count)
+            .Where(i => deck[i].IsRemovable && exposure[deck[i].Id.Entry] >= Tuning.RemovalExposure)
+            .OrderBy(i => (double)session.CardPlays.GetValueOrDefault(deck[i].Id.Entry) / exposure[deck[i].Id.Entry])
+            .ThenBy(i => RarityRank(deck[i].Rarity))
+            .ThenBy(i => deck[i].CurrentUpgradeLevel)
+            .Where(i => seen.Add($"{deck[i].Id.Entry}+{deck[i].CurrentUpgradeLevel}"))
+            .Take(Math.Max(1, Tuning.RemovalCandidates));
+    }
+
+    private static int RarityRank(CardRarity rarity) =>
+        rarity switch
+        {
+            CardRarity.Curse => 0,
+            CardRarity.Status => 1,
+            CardRarity.Basic => 2,
+            CardRarity.Common => 3,
+            CardRarity.Uncommon => 4,
+            CardRarity.Rare => 5,
+            CardRarity.None => throw new NotImplementedException(),
+            CardRarity.Ancient => throw new NotImplementedException(),
+            CardRarity.Event => throw new NotImplementedException(),
+            CardRarity.Token => throw new NotImplementedException(),
+            CardRarity.Quest => throw new NotImplementedException(),
+            _ => 6,
+        };
 
     private static object WorkbenchEvalReward(JsonElement? args)
     {
@@ -559,7 +592,7 @@ public static class HarnessOps
             Session.Instance,
             a.GetProperty("index").GetInt32(),
             SearchOptionsFrom(a),
-            PlanFrom(a),
+            PlanFrom(a, true),
             a.TryGetProperty("player", out var rp) ? rp.GetInt32() : 0
         );
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
@@ -673,7 +706,7 @@ public static class HarnessOps
             var index = i;
             choices.Add((key, index, new Action(() => CardCmd.Upgrade(deck[index], CardPreviewStyle.None))));
         }
-        var evaluation = Rollout.EvaluateChoices(session, "smith", choices, SearchOptionsFrom(a), PlanFrom(a));
+        var evaluation = Rollout.EvaluateChoices(session, "smith", choices, SearchOptionsFrom(a), PlanFrom(a, true));
         return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
@@ -701,22 +734,19 @@ public static class HarnessOps
             }
             if (entry is MerchantCardRemovalEntry)
             {
-                var strike = player
-                    .Deck.Cards.ToList()
-                    .FindIndex(c =>
-                        c.Id.Entry.StartsWith("STRIKE", StringComparison.Ordinal) && c.CurrentUpgradeLevel == 0
-                    );
-                if (strike < 0)
+                var deck = player.Deck.Cards.ToList();
+                foreach (var candidate in RemovalCandidates(session, deck))
                 {
-                    continue;
+                    var card = deck[candidate];
+                    var suffix = card.CurrentUpgradeLevel > 0 ? $"+{card.CurrentUpgradeLevel}" : "";
+                    choices.Add(
+                        (
+                            $"Remove {card.Id.Entry}{suffix}",
+                            index,
+                            new Action(() => session.Flow.RemoveCard(candidate, slot))
+                        )
+                    );
                 }
-                choices.Add(
-                    (
-                        $"Remove {player.Deck.Cards[strike].Id.Entry}",
-                        index,
-                        new Action(() => session.Flow.RemoveCard(strike, slot))
-                    )
-                );
                 continue;
             }
             var label = entry switch
@@ -727,7 +757,7 @@ public static class HarnessOps
             };
             choices.Add((label, index, new Action(() => session.Flow.Buy(index, slot))));
         }
-        var evaluation = Rollout.EvaluateChoices(session, "shop", choices, SearchOptionsFrom(a), PlanFrom(a));
+        var evaluation = Rollout.EvaluateChoices(session, "shop", choices, SearchOptionsFrom(a), PlanFrom(a, true));
         return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
