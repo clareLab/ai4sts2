@@ -1,0 +1,859 @@
+<title>ai4sts2 工作台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --ground: #f6f5f0;
+  --surface: #fcfcfb;
+  --surface-2: #f0efe9;
+  --surface-3: #e6e4dc;
+  --ink: #15140f;
+  --ink-2: #55534b;
+  --ink-3: #6e6b62;
+  --hair: #e1e0d9;
+  --axis: #c3c2b7;
+  --ring: rgba(21, 20, 15, 0.10);
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s1-wash: rgba(42, 120, 214, 0.12);
+  --s2-wash: rgba(235, 104, 52, 0.14);
+  --seq-0: #f0efe9;
+  --seq-1: #86b6ef;
+  --seq-2: #5598e7;
+  --seq-3: #2a78d6;
+  --seq-4: #1c5cab;
+  --seq-5: #0d366b;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --critical: #d03b3b;
+  --critical-text: #b83232;
+  --critical-wash: rgba(208, 59, 59, 0.12);
+  --accent-text: #b5461a;
+  --badge: #1c5cab;
+  --badge-x: #9c3f18;
+  --badge-zero: #55534b;
+  --warning: #fab219;
+  --sans: "IBM Plex Sans", "Noto Sans SC", system-ui, "Microsoft YaHei", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #121210;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --surface-3: #2e2e2b;
+    --ink: #f3f2ed;
+    --ink-2: #c3c2b7;
+    --ink-3: #8f8d84;
+    --hair: #2c2c2a;
+    --axis: #3a3a37;
+    --ring: rgba(255, 255, 255, 0.10);
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s1-wash: rgba(57, 135, 229, 0.18);
+    --s2-wash: rgba(217, 89, 38, 0.2);
+    --seq-0: #232321;
+    --seq-1: #184f95;
+    --seq-2: #256abf;
+    --seq-3: #3987e5;
+    --seq-4: #6da7ec;
+    --seq-5: #b7d3f6;
+    --good: #0ca30c;
+    --good-text: #3fbf3f;
+    --critical: #d03b3b;
+    --critical-text: #ef7b7b;
+    --critical-wash: rgba(208, 59, 59, 0.2);
+    --accent-text: #f08a5b;
+    --badge: #1c5cab;
+    --badge-x: #9c3f18;
+    --badge-zero: #55534b;
+    --warning: #fab219;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #121210;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --surface-3: #2e2e2b;
+  --ink: #f3f2ed;
+  --ink-2: #c3c2b7;
+  --ink-3: #8f8d84;
+  --hair: #2c2c2a;
+  --axis: #3a3a37;
+  --ring: rgba(255, 255, 255, 0.10);
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s1-wash: rgba(57, 135, 229, 0.18);
+  --s2-wash: rgba(217, 89, 38, 0.2);
+  --seq-0: #232321;
+  --seq-1: #184f95;
+  --seq-2: #256abf;
+  --seq-3: #3987e5;
+  --seq-4: #6da7ec;
+  --seq-5: #b7d3f6;
+  --good: #0ca30c;
+  --good-text: #3fbf3f;
+  --critical: #d03b3b;
+  --critical-text: #ef7b7b;
+  --critical-wash: rgba(208, 59, 59, 0.2);
+  --accent-text: #f08a5b;
+  --badge: #1c5cab;
+  --badge-x: #9c3f18;
+  --badge-zero: #55534b;
+  --warning: #fab219;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; }
+a { color: inherit; text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 28px 12px; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
+.brand { font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
+.brand span { font-weight: 400; color: var(--ink-2); margin-left: 10px; }
+nav.main { display: flex; gap: 4px; flex-wrap: wrap; }
+nav.main a { padding: 4px 10px; border-radius: 6px; color: var(--ink-2); font-size: 13px; }
+nav.main a[aria-current="page"] { background: var(--surface-2); color: var(--ink); font-weight: 500; }
+nav.main a:hover { text-decoration: none; background: var(--surface-2); }
+.status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; border: 1px solid var(--ring); background: var(--surface); font-family: var(--mono); font-size: 12px; color: var(--ink); }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); display: inline-block; }
+.pill.on i { background: var(--good); }
+.pill.busy i { background: var(--warning); }
+.pill.off { color: var(--ink-3); }
+main { max-width: 1240px; margin: 0 auto; padding: 18px 28px 60px; display: grid; gap: 22px; }
+.crumbs { font-size: 13px; color: var(--ink-3); display: flex; gap: 6px; flex-wrap: wrap; }
+.crumbs a { color: var(--ink-2); }
+.filters { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+.filters label { display: inline-flex; align-items: center; gap: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg a, .seg button { font: inherit; font-size: 12px; padding: 4px 12px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
+.seg a:hover { text-decoration: none; background: var(--surface-2); }
+.seg [aria-pressed="true"], .seg [aria-current="true"] { background: var(--surface-2); color: var(--ink); font-weight: 500; }
+select { font: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid var(--ring); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.lead { display: grid; grid-template-columns: minmax(220px, 1fr) 3fr; gap: 16px; align-items: stretch; }
+.hero { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 18px 20px 16px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; }
+.hero .label, .tile .label, figure h2, .panel h2 { font-size: 12px; letter-spacing: 0.04em; color: var(--ink-3); font-weight: 500; margin: 0; }
+.hero .value { font-size: 64px; font-weight: 600; line-height: 1; letter-spacing: -0.03em; }
+.hero .value.bad { color: var(--critical-text); }
+.hero .sub { color: var(--ink-2); font-size: 13px; }
+.hero .sub b { color: var(--ink); font-weight: 500; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; color: inherit; }
+a.tile:hover { text-decoration: none; border-color: var(--axis); }
+.tile .value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.tile .value small { font-size: 13px; font-weight: 400; color: var(--ink-3); margin-left: 3px; letter-spacing: 0; }
+.tile .delta { font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 6px; min-height: 18px; }
+.tile .delta.good { color: var(--good-text); }
+.tile .delta.bad { color: var(--critical-text); }
+.tile .spark { margin-top: auto; height: 26px; width: 100%; }
+.row2 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+.row2.even { grid-template-columns: 1fr 1fr; }
+figure, .panel { margin: 0; background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px 18px 14px; min-width: 0; }
+figure header, .panel header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+figure .cap, .panel .cap, .cap { font-size: 12px; color: var(--ink-3); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; border-radius: 1px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { font-family: var(--sans); fill: var(--ink-3); font-size: 11px; }
+svg text.v { fill: var(--ink-2); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+svg .grid { stroke: var(--hair); stroke-width: 1; }
+svg .axis { stroke: var(--axis); stroke-width: 1; }
+svg .leader { stroke: var(--axis); stroke-width: 1; }
+svg .l1 { stroke: var(--s1); } svg .l2 { stroke: var(--s2); } svg .l3 { stroke: var(--s3); }
+svg .f1 { fill: var(--s1); } svg .f2 { fill: var(--s2); } svg .f3 { fill: var(--s3); }
+svg .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+svg .dot { stroke: var(--surface); stroke-width: 2; }
+svg .slot, svg .band { fill: transparent; outline: none; }
+svg a:focus-visible rect, svg rect.band:focus-visible { outline: none; stroke: var(--s1); stroke-width: 2; }
+svg g.hot .cross { opacity: 1; }
+svg .cross { stroke: var(--axis); stroke-width: 1; opacity: 0; pointer-events: none; }
+svg .bar { fill: var(--s1); pointer-events: none; }
+svg g.hot .bar { fill: var(--seq-4); }
+.cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(22px, 1fr)); gap: 4px; }
+.cell { display: block; aspect-ratio: 1; border-radius: 3px; background: var(--seq-0); position: relative; outline: none; }
+.cell[data-lvl="1"] { background: var(--seq-1); }
+.cell[data-lvl="2"] { background: var(--seq-2); }
+.cell[data-lvl="3"] { background: var(--seq-3); }
+.cell[data-lvl="4"] { background: var(--seq-4); }
+.cell[data-lvl="5"] { background: var(--seq-5); }
+.cell:hover, .cell:focus-visible { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink-3); z-index: 1; text-decoration: none; }
+.cell.fail::after { content: "×"; position: absolute; inset: 3px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; line-height: 1; color: #fff; background: var(--critical); }
+.scale { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-3); }
+.scale i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+.toggle, .btn { font: inherit; font-size: 12px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--ring); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.btn:hover { text-decoration: none; background: var(--surface-3); }
+.btn[disabled] { opacity: 0.45; cursor: default; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--hair); white-space: nowrap; vertical-align: top; }
+th { font-size: 11px; letter-spacing: 0.04em; color: var(--ink-3); font-weight: 500; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.id, .id { font-family: var(--mono); font-size: 12px; }
+td.wrap { white-space: normal; max-width: 420px; }
+tr.cur td { background: var(--s1-wash); }
+.state { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.state.pass { color: var(--good-text); }
+.state.fail { color: var(--critical-text); }
+.state svg { width: 12px; height: 12px; display: inline-block; }
+.muted { color: var(--ink-3); }
+.empty { color: var(--ink-3); padding: 24px 0; text-align: center; }
+code { font-family: var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+.tip { position: fixed; pointer-events: none; z-index: 10; display: none; background: var(--ink); color: var(--ground); padding: 8px 10px; border-radius: 6px; font-size: 12px; line-height: 1.5; max-width: 340px; font-family: var(--mono); font-variant-numeric: tabular-nums; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+.tip .row { display: flex; gap: 8px; align-items: baseline; }
+.tip .row b { font-weight: 600; }
+.tip .row i { width: 10px; height: 2px; border-radius: 1px; display: inline-block; flex: none; }
+.tip .row span { opacity: 0.75; }
+.tip .head { opacity: 0.75; margin-bottom: 2px; }
+.detail { background: var(--surface-2); border-radius: 6px; padding: 8px 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; margin-top: 8px; max-height: 240px; overflow: auto; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 13px; }
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.card { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--ring); font-size: 12px; color: inherit; white-space: nowrap; }
+.card:hover { text-decoration: none; border-color: var(--axis); }
+.card .cost { min-width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--badge); color: #fff; font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.card .cost.x { background: var(--badge-x); }
+.card .cost.zero { background: var(--badge-zero); }
+.card .up { color: var(--good-text); font-weight: 600; }
+.card.played { background: var(--s1-wash); border-color: var(--s1); }
+.card.dim { color: var(--ink-2); background: transparent; border-style: dashed; }
+.replay { display: grid; gap: 14px; }
+.replay-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.controls .btn { padding: 4px 10px; font-family: var(--mono); }
+.controls .count { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 13px; min-width: 70px; text-align: center; }
+.timeline { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 0; }
+.tl-legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
+.tl-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+.tick { display: block; width: 20px; height: 26px; border-radius: 3px; background: var(--surface-3); position: relative; }
+.tick.play { background: var(--seq-2); }
+.tick.end { background: var(--s2); opacity: 0.8; }
+.tick.start { background: var(--axis); }
+.tick.mismatch { background: var(--critical); }
+.tick.cur { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); z-index: 1; }
+.tick.done::after { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 3px; border-radius: 2px; background: var(--surface); opacity: 0.6; }
+.tick:hover { text-decoration: none; }
+.banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: 8px; background: var(--surface-2); font-size: 14px; }
+.banner.end { background: var(--s2-wash); }
+.banner.play { background: var(--s1-wash); }
+.banner.mismatch { background: var(--critical-wash); }
+.banner .micros { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.board { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.creatures { display: grid; gap: 10px; }
+.creature { border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; background: var(--surface); }
+.creature.dead { border-style: dashed; }
+.creature.dead .name b::after { content: " · 已倒下"; font-weight: 400; color: var(--ink-3); }
+.creature .name { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.creature .name b { font-weight: 600; }
+.creature .intent { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.hp { display: grid; grid-template-columns: 1fr max-content; gap: 8px; align-items: center; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+.hpbar { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; position: relative; }
+.hpbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--critical); border-radius: 4px; }
+.hpbar i.block { background: var(--s1); opacity: 0.85; left: auto; right: 0; }
+.stats { display: flex; gap: 12px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.stats b { color: var(--ink); font-weight: 600; }
+.powers { display: flex; gap: 6px; flex-wrap: wrap; }
+.power { padding: 1px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--ring); font-family: var(--mono); font-size: 11px; }
+.energy { display: inline-flex; gap: 4px; align-items: center; }
+.energy i { width: 12px; height: 12px; border-radius: 50%; background: var(--s2); display: inline-block; }
+.energy i.off { background: var(--surface-3); }
+.piles { display: grid; gap: 10px; }
+.pile summary { cursor: pointer; font-size: 13px; color: var(--ink-2); list-style: none; display: flex; align-items: center; gap: 8px; }
+.pile summary::before { content: "▸"; color: var(--ink-3); font-size: 11px; }
+.pile[open] summary::before { content: "▾"; }
+.pile summary b { color: var(--ink); font-weight: 600; font-family: var(--mono); }
+.pile .chips { margin-top: 8px; }
+.rng { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; font-family: var(--mono); font-size: 12px; }
+.rng div { display: flex; justify-content: space-between; gap: 8px; }
+.rng .d { color: var(--ink-3); }
+.rng .d.chg { color: var(--accent-text); font-weight: 600; }
+.changed { animation: flash 700ms ease-out; }
+@keyframes flash { from { background: var(--s2-wash); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .changed { animation: none; } }
+.list { display: grid; gap: 6px; }
+@media (max-width: 860px) {
+  .lead, .row2, .row2.even, .board { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero .value { font-size: 48px; }
+}
+</style>
+<header class="top">
+  <div class="brand"><a href="#/">ai4sts2</a> <span>工作台监视</span></div>
+  <nav class="main" id="nav"></nav>
+  <div class="status" id="status"></div>
+</header>
+<main id="main"><div class="empty">加载中…</div></main>
+<div class="tip" id="tip" role="tooltip"></div>
+<script id="data" type="application/json">null</script>
+<script>
+(function () {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const fmt = (v, d = 0) => v == null || Number.isNaN(v) ? "–" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+  const usParts = (v) => v == null ? { value: "–", unit: "" } : v >= 10000 ? { value: fmt(v / 1000, 1), unit: "ms" } : { value: fmt(v, v < 100 ? 1 : 0), unit: "µs" };
+  const fmtUs = (v) => { const p = usParts(v); return p.unit ? `${p.value} ${p.unit}` : p.value; };
+  const short = (ts) => ts ? ts.slice(5, 16).replace("T", " ") : "";
+  const clock = (ts) => ts ? ts.slice(11, 19) : "";
+  const human = (id) => String(id || "").toLowerCase().split("_").map((w) => w ? w[0].toUpperCase() + w.slice(1) : "").join(" ");
+  const WINDOWS = [{ key: "all", label: "全部", n: Infinity }, { key: "50", label: "最近 50 次", n: 50 }, { key: "20", label: "最近 20 次", n: 20 }, { key: "5", label: "最近 5 次", n: 5 }];
+
+  const embedded = JSON.parse(document.getElementById("data").textContent);
+  const store = { live: !embedded, index: embedded ? embedded.index : [], status: embedded ? embedded.status : null, runs: new Map(Object.entries(embedded ? embedded.runs || {} : {})), loading: new Map() };
+
+  async function fetchJson(path) {
+    const r = await fetch(path, { cache: "no-store" });
+    if (!r.ok) throw new Error(`${path}: ${r.status}`);
+    return r.json();
+  }
+  async function loadRun(id) {
+    if (store.runs.has(id)) return store.runs.get(id);
+    if (!store.loading.has(id)) {
+      store.loading.set(id, fetchJson(`data/runs/${id}.json`).then((run) => { store.runs.set(id, run); store.loading.delete(id); return run; }).catch((e) => { store.loading.delete(id); throw e; }));
+    }
+    return store.loading.get(id);
+  }
+  const loadFail = (id, f) => `<div class="empty">记录文件 <code>data/runs/${esc(id)}.json</code> 加载失败${location.protocol === "file:" ? "（从磁盘直接打开时只有内嵌的最近记录可用，其余需要 <code>just monitor</code> 或 <code>just archive</code> 全量内嵌）" : ""} · <a href="${href("/run/" + id, f)}">重试</a></div>`;
+
+  function parseHash() {
+    const raw = location.hash.replace(/^#/, "") || "/";
+    const [path, qs] = raw.split("?");
+    const q = new URLSearchParams(qs || "");
+    const parts = path.split("/").filter(Boolean);
+    return { parts, q, path };
+  }
+  function filtersFrom(q) {
+    const f = { window: q.get("window") || "20", version: q.get("version") || "all" };
+    if (!WINDOWS.some((w) => w.key === f.window)) f.window = "20";
+    if (f.version !== "all" && !versionsOf(store.index).includes(f.version)) f.version = "all";
+    return f;
+  }
+  function href(path, f, extra) {
+    const q = new URLSearchParams();
+    if (f) { q.set("window", f.window); q.set("version", f.version); }
+    if (extra) for (const [k, v] of Object.entries(extra)) if (v != null && v !== "") q.set(k, v);
+    const s = q.toString();
+    return `#${path}${s ? "?" + s : ""}`;
+  }
+  const pageParams = (route) => Object.fromEntries([...route.q].filter(([k]) => k !== "window" && k !== "version"));
+  const tablesOf = (route) => new Set((route.q.get("tables") || "").split(",").filter(Boolean));
+
+  const inWindow = (rows, f) => { const n = (WINDOWS.find((w) => w.key === f.window) || WINDOWS[0]).n; return Number.isFinite(n) ? rows.slice(-n) : rows; };
+  const inVersion = (rows, f) => f.version === "all" ? rows : rows.filter((r) => (r.game || "?") === f.version);
+  const versionsOf = (rows) => [...new Set(rows.map((r) => r.game || "?"))].sort();
+
+  function derive(rows, f) {
+    const scoped = inVersion(rows, f);
+    const modelsRow = scoped.filter((r) => r.kind === "models").slice(-1)[0] || rows.filter((r) => r.kind === "models").slice(-1)[0] || null;
+    const benches = inWindow(scoped.filter((r) => r.kind === "bench" && r.result && r.result.plays && r.result.plays.count), f);
+    const warmups = inWindow(scoped.filter((r) => r.kind === "warmup"), f);
+    const diffs = inWindow(scoped.filter((r) => r.kind === "diff"), f);
+    const perAction = (b) => { const r = b.result; const n = (r.plays.count || 0) + ((r.endTurns || {}).count || 0) + ((r.starts || {}).count || 0); return n ? r.allocatedBytes / n : null; };
+    const cards = {}; const encounters = {}; let steps = 0, mism = 0; const seeds = new Set();
+    for (const d of diffs) {
+      steps += d.steps || 0; mism += d.mismatches || 0;
+      for (const s of d.seeds || []) seeds.add(s);
+      const perCase = (d.cases || []).length > 0 && d.cases.every((c) => c.played);
+      if (perCase) {
+        d.cases.forEach((c, ci) => {
+          for (const [id, n] of Object.entries(c.played)) { const x = cards[id] || (cards[id] = { n: 0, fail: false, cases: [] }); x.n += n; if (c.mismatches) x.fail = true; x.cases.push({ run: d.id, ci }); }
+        });
+      } else {
+        const clean = (d.mismatches || 0) === 0;
+        for (const [id, n] of Object.entries(d.played || {})) { const x = cards[id] || (cards[id] = { n: 0, fail: false, cases: [] }); x.n += n; if (!clean) x.fail = true; }
+      }
+      (d.cases || []).forEach((c, ci) => {
+        const e = encounters[c.encounter] || (encounters[c.encounter] = { n: 0, steps: 0, fail: false, cases: [] });
+        e.n += 1; e.steps += c.steps || 0; if (c.mismatches) e.fail = true; e.cases.push({ run: d.id, ci, seed: c.seed, steps: c.steps, mismatches: c.mismatches, outcome: c.outcome, ts: d.ts, replay: Boolean(d.replay) });
+      });
+    }
+    return { modelsRow, benches, warmups, diffs, perAction, cards, encounters, steps, mism, seeds };
+  }
+
+  function statusPill(inst) {
+    const cls = !inst.alive ? "off" : inst.busy ? "busy" : "on";
+    const txt = !inst.alive ? "未运行" : inst.busy ? "执行中" : inst.ready ? "就绪" : "启动中";
+    return `<a class="pill ${cls}" href="#/instances" title="pid ${inst.pid || "–"}"><i></i>${esc(inst.name)} · ${txt}</a>`;
+  }
+  function renderStatus() {
+    const st = store.status;
+    const gen = st && st.generatedAt ? st.generatedAt : (embedded && embedded.exportedAt) || null;
+    $("#status").innerHTML = (st ? st.instances.map(statusPill).join("") : "") + `<span>${store.live ? "实时" : "快照"} · ${short(gen)}</span>`;
+  }
+  function renderNav(route) {
+    const f = filtersFrom(route.q);
+    const items = [["/", "总览"], ["/runs", "运行记录"], ["/cards", "牌"], ["/encounters", "遭遇"], ["/instances", "实例"]];
+    const head = route.parts[0] || "";
+    const cur = { "": "/", runs: "/runs", run: "/runs", cards: "/cards", card: "/cards", encounters: "/encounters", encounter: "/encounters", instances: "/instances" }[head] || "";
+    $("#nav").innerHTML = items.map(([p, l]) => `<a href="${href(p, f)}" ${p === cur ? 'aria-current="page"' : ""}>${l}</a>`).join("");
+  }
+
+  function sparkline(vals, cls) {
+    const v = (vals || []).filter((x) => x != null); if (v.length < 2) return "";
+    const w = 160, h = 26;
+    const lo = Math.min(...v), hi = Math.max(...v), rng = hi - lo || 1;
+    const pts = v.map((x, i) => [(i / (v.length - 1)) * (w - 10) + 5, h - 5 - ((x - lo) / rng) * (h - 10)]);
+    const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    const last = pts[pts.length - 1];
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" aria-hidden="true"><path class="line" d="${d}" style="stroke: var(--axis)"/><circle class="dot ${cls}" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4"/></svg>`;
+  }
+  function tile(label, value, unit, delta, spark, link) {
+    const inner = `<div class="label">${label}</div><div class="value">${value}${unit ? `<small>${unit}</small>` : ""}</div><div class="delta ${delta ? delta.cls : ""}">${delta ? delta.text : ""}</div>${spark || ""}`;
+    return link ? `<a class="tile" href="${link}">${inner}</a>` : `<div class="tile">${inner}</div>`;
+  }
+  function deltaOf(cur, prev, lowerIsBetter, unitFmt) {
+    if (cur == null || prev == null) return null;
+    const diff = cur - prev; if (Math.abs(diff) < 1e-9) return { cls: "", text: "与上次持平" };
+    const pct = prev ? (diff / prev) * 100 : 0;
+    const good = lowerIsBetter ? diff < 0 : diff > 0;
+    return { cls: good ? "good" : "bad", text: `${diff < 0 ? "▼" : "▲"} ${unitFmt(Math.abs(diff))} (${fmt(Math.abs(pct), 0)}%) vs 上次` };
+  }
+  const tipRow = (value, label, color) => `<div class="row">${color ? `<i style="background:${color}"></i>` : ""}<b>${esc(value)}</b><span>${esc(label)}</span></div>`;
+  const tipHead = (t) => `<div class="head">${esc(t)}</div>`;
+
+  const chartWidth = (share) => { const cw = ($("#main").clientWidth || 1200) - 40; return cw < 820 ? Math.max(320, cw) : Math.max(320, Math.round(cw * share) - 40); };
+  const SERIES = [{ key: "plays", name: "出牌", cls: 1, color: "var(--s1)" }, { key: "endTurns", name: "结束回合", cls: 2, color: "var(--s2)" }, { key: "starts", name: "开局", cls: 3, color: "var(--s3)" }];
+  const perfTable = (bs) => `<table><thead><tr><th>时间</th>${SERIES.map((s) => `<th class="num">${s.name} 中位</th><th class="num">${s.name} p95</th>`).join("")}</tr></thead><tbody>${bs.slice().reverse().map((b) => `<tr><td class="muted">${short(b.ts)}</td>${SERIES.map((s) => { const v = b.result[s.key] || {}; return `<td class="num">${fmt(v.median, 0)}</td><td class="num">${fmt(v.p95, 0)}</td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+  function logChart(benches, f) {
+    const bs = benches; const N = bs.length;
+    if (!N) return `<div class="empty">窗口内没有 bench 记录 — 跑 <code>just bench</code></div>`;
+    const series = SERIES;
+    const W = chartWidth(0.6), H = 240, L = 46, R = 110, T = 14, B = 30;
+    const all = []; bs.forEach((b) => series.forEach((s) => { const v = (b.result[s.key] || {}).median; if (v) all.push(v); }));
+    const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...all)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...all))));
+    const y = (v) => T + (H - T - B) * (1 - (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)));
+    const x = (i) => L + (N === 1 ? (W - L - R) / 2 : (i / (N - 1)) * (W - L - R));
+    let g = "";
+    for (let d = lo; d <= hi; d *= 10) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(d).toFixed(1)}" y2="${y(d).toFixed(1)}"/><text class="v" x="${L - 8}" y="${(y(d) + 4).toFixed(1)}" text-anchor="end">${d >= 1000 ? d / 1000 + "k" : d}</text>`;
+    g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>`;
+    const step = Math.max(1, Math.ceil(N / 6));
+    bs.forEach((b, i) => { if ((i % step === 0 && N - 1 - i >= step / 2) || i === N - 1) g += `<text x="${x(i).toFixed(1)}" y="${H - B + 16}" text-anchor="middle">${clock(b.ts)}</text>`; });
+    let paths = "", dots = "", labels = ""; const ends = [];
+    series.forEach((s) => {
+      const pts = bs.map((b, i) => { const v = (b.result[s.key] || {}).median; return v ? [x(i), y(v), v] : null; });
+      paths += `<path class="line l${s.cls}" d="${pts.map((p, i) => p ? (i === 0 || !pts[i - 1] ? "M" : "L") + p[0].toFixed(1) + " " + p[1].toFixed(1) : "").join(" ")}"/>`;
+      const last = pts.filter(Boolean).slice(-1)[0];
+      if (last) { dots += `<circle class="dot f${s.cls}" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4"/>`; ends.push({ x: last[0], y0: last[1], y: last[1], text: `${s.name} ${fmtUs(last[2])}` }); }
+    });
+    ends.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+    ends.forEach((e) => {
+      if (Math.abs(e.y - e.y0) > 0.5) labels += `<line class="leader" x1="${(e.x + 5).toFixed(1)}" y1="${e.y0.toFixed(1)}" x2="${(W - R + 6).toFixed(1)}" y2="${e.y.toFixed(1)}"/>`;
+      labels += `<text class="v" x="${W - R + 8}" y="${(e.y + 4).toFixed(1)}">${esc(e.text)}</text>`;
+    });
+    let slots = ""; const sw = N > 1 ? (W - L - R) / (N - 1) : W - L - R;
+    bs.forEach((b, i) => {
+      const r = b.result;
+      const tip = tipHead(`${short(b.ts)} · ${b.encounter} × ${b.rounds}`) + series.map((s) => { const v = r[s.key] || {}; return v.median ? tipRow(fmtUs(v.median), `${s.name} 中位 · p95 ${fmtUs(v.p95)}`, s.color) : ""; }).join("") + tipRow(`${fmt(r.allocatedBytes / 1e6, 0)} MB`, "分配") + (b.patches != null ? tipRow(fmt(b.patches), "拦截点") : "") + tipRow("点击", "打开这次 bench");
+      slots += `<g><a href="${href("/run/" + b.id, f)}" aria-label="${esc(short(b.ts))} bench" data-tip="${esc(tip)}"><rect class="slot" x="${(x(i) - sw / 2).toFixed(1)}" y="${T}" width="${sw.toFixed(1)}" height="${H - T - B}"/></a><line class="cross" x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${T}" y2="${H - B}"/></g>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="性能趋势">${g}${paths}${dots}${labels}${slots}</svg>`;
+  }
+
+  function columns(vals, unit, label) {
+    if (!vals || !vals.length) return `<div class="empty">无数据</div>`;
+    const W = chartWidth(0.4), H = 200, L = 40, R = 12, T = 16, B = 26;
+    const hi = Math.max(...vals) * 1.08 || 1;
+    const nice = Math.pow(10, Math.floor(Math.log10(hi))); const tick = hi / nice >= 5 ? nice * 2 : hi / nice >= 2 ? nice : nice / 2;
+    const y = (v) => T + (H - T - B) * (1 - v / hi);
+    const n = vals.length, band = (W - L - R) / n, bw = Math.max(1, Math.min(24, band - 2));
+    let g = "";
+    for (let t = 0; t <= hi; t += tick) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/><text class="v" x="${L - 8}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end">${fmt(t, tick < 1 ? 1 : 0)}</text>`;
+    g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>`;
+    let bars = "";
+    vals.forEach((v, i) => {
+      const cx = L + band * i + band / 2, top = y(v), h = Math.max(0, H - B - top), rr = Math.min(4, h, bw / 2);
+      const p = `M${(cx - bw / 2).toFixed(1)} ${(H - B).toFixed(1)} V${(top + rr).toFixed(1)} a${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} -${rr.toFixed(2)} H${(cx + bw / 2 - rr).toFixed(1)} a${rr.toFixed(2)} ${rr.toFixed(2)} 0 0 1 ${rr.toFixed(2)} ${rr.toFixed(2)} V${(H - B).toFixed(1)} Z`;
+      bars += `<g><rect class="band" tabindex="0" role="img" aria-label="${esc(label)} ${i + 1}: ${fmt(v, 2)} ${esc(unit)}" x="${(cx - band / 2).toFixed(1)}" y="${T}" width="${band.toFixed(1)}" height="${H - T - B}" data-tip="${esc(tipRow(`${fmt(v, 2)} ${unit}`, `${label} ${i + 1}`))}"/><path class="bar" d="${p}"/></g>`;
+      if (n <= 12 || i % Math.ceil(n / 8) === 0) g += `<text x="${cx.toFixed(1)}" y="${H - B + 16}" text-anchor="middle">${i + 1}</text>`;
+    });
+    const last = vals[n - 1];
+    bars += `<text class="v" x="${(L + band * (n - 1) + band / 2).toFixed(1)}" y="${(y(last) - 6).toFixed(1)}" text-anchor="middle">${fmt(last, 2)} ${unit}</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${g}${bars}</svg>`;
+  }
+  const columnsTable = (vals, unit, label) => `<table><thead><tr><th>${esc(label)}</th><th class="num">${esc(unit)}</th></tr></thead><tbody>${(vals || []).map((v, i) => `<tr><td class="num">${i + 1}</td><td class="num">${fmt(v, 2)}</td></tr>`).join("")}</tbody></table>`;
+  const lvl = (n) => n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 7 ? 3 : n <= 15 ? 4 : 5;
+  function figureWithTable(id, title, capHtml, chartHtml, tableHtml) {
+    return `<figure><header><h2>${title}</h2><div class="cap">${capHtml} <button class="toggle" data-toggle="${id}" aria-pressed="false">表格</button></div></header><div id="${id}-grid">${chartHtml}</div><div class="tablewrap" id="${id}-table" hidden>${tableHtml}</div></figure>`;
+  }
+  const okIcon = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const badIcon = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+  const state = (fail, n) => `<span class="state ${fail ? "fail" : n ? "pass" : "muted"}">${fail ? badIcon + "不一致" : n ? okIcon + "一致" : "未验证"}</span>`;
+  const outcomeText = { won: "胜利", lost: "阵亡", running: "未打完", mismatch: "不一致" };
+
+  function coverage(id, title, items, stats, f, kind, tipf, tableCols, hint) {
+    if (!items.length) return `<figure><header><h2>${title}</h2></header><div class="empty">${hint}</div></figure>`;
+    const verified = items.filter((it) => (stats[it.id] || {}).n > 0).length;
+    const cells = items.map((it) => { const s = stats[it.id] || { n: 0 }; return `<a class="cell ${s.fail ? "fail" : ""}" href="${href(`/${kind}/${it.id}`, f)}" data-lvl="${lvl(s.n)}" aria-label="${esc(it.id)} ${s.n} 次${s.fail ? " 不一致" : ""}" data-tip="${esc(tipf(it, s))}"></a>`; }).join("");
+    const rows = items.map((it) => { const s = stats[it.id] || { n: 0 }; return `<tr><td class="id"><a href="${href(`/${kind}/${it.id}`, f)}">${esc(it.id)}</a></td>${tableCols(it, s)}</tr>`; }).join("");
+    const cap = `<b>${verified}</b> / ${items.length} 已验证 · <span class="scale">0 <i style="background:var(--seq-0)"></i><i style="background:var(--seq-1)"></i><i style="background:var(--seq-2)"></i><i style="background:var(--seq-3)"></i><i style="background:var(--seq-4)"></i><i style="background:var(--seq-5)"></i> 16+ 次 · × 有不一致</span>`;
+    return figureWithTable(id, title, cap, `<div class="cells">${cells}</div>`, `<table><thead><tr><th>ID</th><th>说明</th><th class="num">次数</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table>`);
+  }
+  const cardTip = (c, s) => tipHead(c.id) + tipRow(`${s.n} 次`, "打出并核对") + tipRow(`${c.costsX ? "X" : c.cost} 费`, `${c.type} · ${c.rarity} · ${c.target}`) + (s.fail ? tipRow("×", "有不一致") : "") + tipRow("点击", "查看每次打出");
+  const cardCols = (c, s) => `<td class="muted">${esc(c.type)} · ${esc(c.rarity)} · ${c.costsX ? "X" : c.cost} 费</td><td class="num">${s.n}</td><td>${state(s.fail, s.n)}</td>`;
+  const encTip = (e, s) => tipHead(e.id) + tipRow(`${s.n} 场`, `${e.type} · ${s.steps || 0} 步`) + (s.fail ? tipRow("×", "有不一致") : "") + tipRow("点击", "查看每一场");
+  const encCols = (e, s) => `<td class="muted">${esc(e.type)}</td><td class="num">${s.n}</td><td>${state(s.fail, s.n)}</td>`;
+
+  function filterBar(route, f) {
+    const versions = versionsOf(store.index);
+    const path = route.path;
+    const extra = pageParams(route);
+    return `<div class="filters"><label>窗口 <span class="seg" role="group">${WINDOWS.map((w) => `<a href="${href(path, { ...f, window: w.key }, extra)}" aria-current="${w.key === f.window}">${w.label}</a>`).join("")}</span></label><label>游戏版本 <select data-version>${["all", ...versions].map((v) => `<option value="${esc(v)}" ${v === f.version ? "selected" : ""}>${v === "all" ? "全部" : esc(v)}</option>`).join("")}</select></label><span class="muted">作用于所有图表、指标与表格 · 记录 ${store.index.length} 条</span></div>`;
+  }
+
+  async function modelsFor(D) {
+    if (!D.modelsRow) return { cards: [], encounters: [], missing: true };
+    try { const run = await loadRun(D.modelsRow.id); return run.detail || { cards: [], encounters: [], missing: true }; } catch (e) { return { cards: [], encounters: [], failed: D.modelsRow.id }; }
+  }
+  const modelsHint = (models, what) => models.failed ? `牌池快照 <code>${esc(models.failed)}</code> 加载失败${location.protocol === "file:" ? "（磁盘直开时需要 <code>just archive</code> 的全量内嵌版）" : ""}` : `还没有${what}快照 — 跑 <code>python scripts/bench.py models</code>`;
+
+  async function pageDash(route, f) {
+    const rows = store.index;
+    if (!rows.length) return `${filterBar(route, f)}<div class="empty">metrics/runs.jsonl 还是空的 — 跑 <code>just diff</code> 或 <code>just bench</code> 后回来</div>`;
+    const D = derive(rows, f);
+    const models = await modelsFor(D);
+    const lb = D.benches[D.benches.length - 1] || null, pb = D.benches[D.benches.length - 2] || null;
+    const m = (b, k) => b ? (b.result[k] || {}).median : null;
+    const kb = (b) => b ? D.perAction(b) / 1024 : null;
+    const ironclad = models.cards.filter((c) => c.pool === "IRONCLAD_CARD_POOL");
+    const encs = models.encounters;
+    const cardsVerified = ironclad.filter((c) => (D.cards[c.id] || {}).n > 0).length;
+    const encVerified = encs.filter((e) => (D.encounters[e.id] || {}).n > 0).length;
+    const patches = lb ? lb.patches : null;
+    const lbLink = lb ? href("/run/" + lb.id, f) : null;
+    const usTile = (label, key, cls) => { const p = usParts(m(lb, key)); return tile(label, p.value, p.unit, deltaOf(m(lb, key), m(pb, key), true, fmtUs), sparkline(D.benches.map((b) => m(b, key)).slice(-12), cls), lbLink); };
+    const tiles = [
+      usTile("出牌 中位", "plays", "f1"), usTile("结束回合 中位", "endTurns", "f2"), usTile("开局 中位", "starts", "f3"),
+      tile("分配 / 动作", fmt(kb(lb), 0), "KB", deltaOf(kb(lb), kb(pb), true, (v) => fmt(v, 0) + " KB"), sparkline(D.benches.map(kb).slice(-12), "f1"), lbLink),
+      tile("已验证牌", `${cardsVerified}<small>/ ${ironclad.length || "?"}</small>`, "", { cls: "", text: `${Object.keys(D.cards).length} 种打出过` }, "", href("/cards", f)),
+      tile("已验证遭遇", `${encVerified}<small>/ ${encs.length || "?"}</small>`, "", { cls: "", text: `${D.seeds.size} 个种子` }, "", href("/encounters", f)),
+    ].join("");
+    const lw = D.warmups[D.warmups.length - 1] || null;
+    const curve = lw && lw.result && lw.result.millisPerRound ? lw.result.millisPerRound : null;
+    const colFig = curve
+      ? figureWithTable("warm", "热身曲线", `<span>每批 ${lw.rounds} 场的均值 ms/场，批间空闲 ${lw.idle} s · <a href="${href("/run/" + lw.id, f)}">详情</a></span>`, columns(curve, "ms", "批"), columnsTable(curve, "ms/场", "批"))
+      : `<figure><header><h2>热身曲线</h2></header><div class="empty">窗口内没有热身记录 — 跑 <code>just warmup</code></div></figure>`;
+    const diffRows = D.diffs.slice().reverse().map((d) => `<tr><td class="muted"><a href="${href("/run/" + d.id, f)}">${short(d.ts)}</a></td><td class="id wrap">${d.encounters.map((e) => `<a href="${href("/encounter/" + e, f)}">${esc(e)}</a>`).join(", ")}</td><td class="id">${d.seeds.map(esc).join(", ")}</td><td class="num">${d.deck.length || "起始"}</td><td class="num">${fmt(d.steps)}</td><td class="num">${Object.keys(d.played || {}).length}</td><td>${state(d.mismatches > 0, d.steps)}</td><td class="num">${fmt(d.wallSeconds, 0)} s</td><td><a class="btn" href="${href("/run/" + d.id, f)}">回放</a></td></tr>`).join("");
+    const benchRows = D.benches.slice().reverse().map((b) => { const r = b.result, e = r.endTurns || {}, s = r.starts || {}; return `<tr><td class="muted"><a href="${href("/run/" + b.id, f)}">${short(b.ts)}</a></td><td class="id"><a href="${href("/encounter/" + b.encounter, f)}">${esc(b.encounter)}</a></td><td class="num">${b.rounds}</td><td class="num">${fmt(r.plays.median, 0)}</td><td class="num">${fmt(r.plays.p95, 0)}</td><td class="num">${fmt(e.median, 0)}</td><td class="num">${fmt(e.p95, 0)}</td><td class="num">${fmt(s.median, 0)}</td><td class="num">${fmt(s.p95, 0)}</td><td class="num">${fmt(D.perAction(b) / 1024, 0)}</td><td class="num">${fmt(r.allocatedBytes / 1e6, 0)}</td><td class="num">${fmt(r.totalMillis / 1000, 1)} s</td><td class="num">${r.gc ? `${r.gc.gen0}/${r.gc.gen1}/${r.gc.gen2}` : "–"}</td><td class="num">${b.patches ?? "–"}</td></tr>`; }).join("");
+    return `${filterBar(route, f)}
+      <section class="lead">
+        <a class="hero" href="${href("/runs", f, { kind: "diff" })}"><div class="label">累计不一致</div><div class="value ${D.mism ? "bad" : ""}">${fmt(D.mism)}</div><div class="sub">工作台 vs 真实流程 · <b>${fmt(D.steps)}</b> 步差分 · <b>${D.diffs.length}</b> 次运行<br>拦截点 <b>${patches == null ? "–" : fmt(patches)}</b> / 500 门禁</div></a>
+        <div class="tiles">${tiles}</div>
+      </section>
+      <section class="row2">
+        ${figureWithTable("perf", "性能趋势", `<span class="legend"><span><i style="background:var(--s1)"></i>出牌</span><span><i style="background:var(--s2)"></i>结束回合（含敌方回合）</span><span><i style="background:var(--s3)"></i>开局</span></span><span>每次 bench 的中位 µs，对数轴 · 点一个点打开那次</span>`, logChart(D.benches, f), perfTable(D.benches))}
+        ${colFig}
+      </section>
+      <section class="row2 even">
+        ${coverage("cards", "Ironclad 牌覆盖", ironclad, D.cards, f, "card", cardTip, cardCols, modelsHint(models, "牌池"))}
+        ${coverage("encs", "遭遇覆盖", encs, D.encounters, f, "encounter", encTip, encCols, modelsHint(models, "遭遇"))}
+      </section>
+      <figure><header><h2>差分历史</h2><div class="cap">窗口内 ${D.diffs.length} 次 · <a href="${href("/runs", f, { kind: "diff" })}">全部</a></div></header><div class="tablewrap"><table><thead><tr><th>时间</th><th>遭遇</th><th>种子</th><th class="num">卡组</th><th class="num">步数</th><th class="num">牌种</th><th>结果</th><th class="num">耗时</th><th></th></tr></thead><tbody>${diffRows || `<tr><td colspan="9" class="empty">窗口内没有差分记录</td></tr>`}</tbody></table></div></figure>
+      <figure><header><h2>Bench 历史</h2><div class="cap">窗口内 ${D.benches.length} 次 · 时间单位 µs · <a href="${href("/runs", f, { kind: "bench" })}">全部</a></div></header><div class="tablewrap"><table><thead><tr><th>时间</th><th>遭遇</th><th class="num">场数</th><th class="num">出牌中位</th><th class="num">出牌 p95</th><th class="num">结束回合中位</th><th class="num">结束回合 p95</th><th class="num">开局中位</th><th class="num">开局 p95</th><th class="num">KB/动作</th><th class="num">分配 MB</th><th class="num">总耗时</th><th class="num">GC 0/1/2</th><th class="num">拦截点</th></tr></thead><tbody>${benchRows || `<tr><td colspan="14" class="empty">窗口内没有 bench 记录</td></tr>`}</tbody></table></div></figure>`;
+  }
+
+  function runSummaryCells(r, f) {
+    if (r.kind === "diff") return `${r.encounters.length} 遭遇 × ${r.seeds.length} 种子 · ${fmt(r.steps)} 步 · ${state(r.mismatches > 0, r.steps)}`;
+    if (r.kind === "bench") return `${esc(r.encounter)} × ${r.rounds} · 出牌 ${fmtUs((r.result || {}).plays && r.result.plays.median)} · 结束回合 ${fmtUs(((r.result || {}).endTurns || {}).median)}`;
+    if (r.kind === "warmup") return `${esc(r.encounter)} · ${r.batches} × ${r.rounds} 场 · 末批 ${fmt((r.result.millisPerRound || []).slice(-1)[0], 2)} ms/场`;
+    if (r.kind === "models") return `${r.cards} 张牌 · ${r.encounters} 个遭遇`;
+    return "";
+  }
+  const KINDS = { diff: "差分", bench: "Bench", warmup: "热身", models: "模型快照" };
+
+  function pageRuns(route, f) {
+    const kind = route.q.get("kind") || "all";
+    const rows = inWindow(inVersion(store.index, f).filter((r) => kind === "all" || r.kind === kind), f).slice().reverse();
+    const tabs = ["all", "diff", "bench", "warmup", "models"].map((k) => `<a href="${href("/runs", f, { kind: k === "all" ? null : k })}" aria-current="${k === kind}">${k === "all" ? "全部" : KINDS[k]}</a>`).join("");
+    const body = rows.map((r) => `<tr><td class="muted"><a href="${href("/run/" + r.id, f)}">${short(r.ts)}</a></td><td>${KINDS[r.kind] || esc(r.kind)}</td><td>${runSummaryCells(r, f)}</td><td class="id">${esc(r.game || "?")}</td><td class="id"><a href="${href("/run/" + r.id, f)}">${esc(r.id)}</a></td></tr>`).join("");
+    return `${filterBar(route, f)}<div class="panel"><header><h2>运行记录</h2><div class="cap"><span class="seg">${tabs}</span><span>窗口内 ${rows.length} 条</span></div></header><div class="tablewrap"><table><thead><tr><th>时间</th><th>类型</th><th>摘要</th><th>游戏版本</th><th>ID</th></tr></thead><tbody>${body || `<tr><td colspan="5" class="empty">没有记录</td></tr>`}</tbody></table></div></div>`;
+  }
+
+  function cardChip(c, f, extraCls) {
+    const cost = c.costsX ? "X" : c.cost;
+    const badge = cost === "" || cost == null ? "" : `<span class="cost ${c.costsX ? "x" : cost === 0 ? "zero" : ""}">${cost}</span>`;
+    return `<a class="card ${extraCls || ""}" href="${href("/card/" + c.id, f)}" title="${esc(c.id)}">${badge}${esc(human(c.id))}${c.upgrade ? `<span class="up">+${c.upgrade > 1 ? c.upgrade : ""}</span>` : ""}</a>`;
+  }
+  function kv(pairs) { return `<dl class="kv">${pairs.filter((p) => p[1] != null && p[1] !== "").map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`; }
+  const crumbs = (items) => `<div class="crumbs">${items.map((it, i) => it.href ? `<a href="${it.href}">${it.text}</a>${i < items.length - 1 ? "<span>›</span>" : ""}` : `<span>${it.text}</span>`).join("")}</div>`;
+
+  async function pageRun(route, f) {
+    const id = route.parts[1];
+    const row = store.index.find((r) => r.id === id);
+    let run = null, failed = false;
+    try { run = await loadRun(id); } catch (e) { failed = true; }
+    if (!row && !run) return failed ? loadFail(id, f) : `<div class="empty">找不到运行记录 <code>${esc(id)}</code></div>`;
+    if (failed && row && row.replay) return loadFail(id, f);
+    const r = run || row;
+    const head = `${crumbs([{ text: "总览", href: href("/", f) }, { text: "运行记录", href: href("/runs", f, { kind: r.kind }) }, { text: KINDS[r.kind] || r.kind }])}<h1>${KINDS[r.kind] || esc(r.kind)} · ${short(r.ts)}<span class="id">${esc(r.id)}</span></h1>`;
+    const meta = kv([["游戏版本", esc(r.game || "?")], ["mod", esc(r.mod || "?")], ["commit", esc((r.build || {}).commit || "未提交")], ["mod 构建", short((r.build || {}).modBuilt)], ["记录格式", r.schema || 1]]);
+    const models = await modelsFor(derive(store.index, f));
+    if (r.kind === "diff") {
+      const cases = (run && run.detail && run.detail.cases) || r.cases || [];
+      const hasTrace = cases.some((c) => c.steps && Array.isArray(c.steps));
+      const nsteps = (c) => Array.isArray(c.steps) ? c.steps.length : c.steps;
+      const rows = cases.map((c, ci) => `<tr><td class="num">${ci + 1}</td><td class="id"><a href="${href("/encounter/" + c.encounter, f)}">${esc(c.encounter)}</a></td><td class="id">${esc(c.seed)}</td><td class="num">${nsteps(c)}</td><td class="num">${c.turns ?? "–"}</td><td>${outcomeText[c.outcome] || (c.mismatches ? "不一致" : "–")}</td><td class="num">${c.hpLeft ?? "–"}</td><td class="num">${Object.keys(c.played || {}).length}</td><td>${state(c.mismatches > 0, nsteps(c))}</td><td class="num">${fmt(c.wallSeconds, 0)} s</td><td>${Array.isArray(c.steps) ? `<a class="btn" href="${href(`/run/${r.id}/${ci}/0`, f)}">回放</a>` : `<span class="muted">无回放数据</span>`}</td></tr>`).join("");
+      return `${head}<div class="row2"><div class="panel"><header><h2>参数</h2></header>${kv([["角色", esc(r.character)], ["遭遇", r.encounters.map((e) => `<a href="${href("/encounter/" + e, f)}">${esc(e)}</a>`).join(", ")], ["种子", r.seeds.map(esc).join(", ")], ["策略", esc(r.policy) + (r.randomSeed != null ? ` (seed ${r.randomSeed})` : "")], ["最大步数", r.maxSteps], ["oracle", r.oracle ? `${esc(r.oracle.game)} · FastMode ${esc(r.oracle.fastMode)}` : "–"], ["拦截点", r.patches ?? "–"], ["总步数", `${fmt(r.steps)} · 不一致 ${fmt(r.mismatches)}`], ["耗时", `${fmt(r.wallSeconds, 0)} s`]])}</div><div class="panel"><header><h2>记录</h2></header>${meta}</div></div>
+        <div class="panel"><header><h2>卡组</h2><div class="cap">${r.deck.length ? r.deck.length + " 张" : "角色起始卡组"}</div></header><div class="chips">${r.deck.map((spec) => { const plus = spec.indexOf("+"); const cid = plus < 0 ? spec : spec.slice(0, plus); const m = models.cards.find((c) => c.id === cid); return cardChip({ id: cid, cost: m ? m.cost : "", costsX: m ? m.costsX : false, upgrade: plus < 0 ? 0 : (spec.length === plus + 1 ? 1 : parseInt(spec.slice(plus + 1), 10) || 1) }, f); }).join("") || `<span class="muted">起始卡组</span>`}</div></div>
+        <div class="panel"><header><h2>对局</h2><div class="cap">${cases.length} 场${hasTrace ? "" : " · 这次运行早于回放记录功能"}</div></header><div class="tablewrap"><table><thead><tr><th class="num">#</th><th>遭遇</th><th>种子</th><th class="num">步数</th><th class="num">回合</th><th>结果</th><th class="num">剩余 HP</th><th class="num">牌种</th><th>一致性</th><th class="num">耗时</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    }
+    if (r.kind === "bench") {
+      const res = (run && run.detail && run.detail.result) || r.result;
+      const stats = ["starts", "plays", "endTurns"].map((k) => { const v = res[k] || {}; return v.count ? `<tr><td>${{ starts: "开局", plays: "出牌", endTurns: "结束回合" }[k]}</td><td class="num">${fmt(v.count)}</td><td class="num">${fmt(v.median, 1)}</td><td class="num">${fmt(v.p95, 1)}</td><td class="num">${fmt(v.min, 1)}</td><td class="num">${fmt(v.max, 1)}</td></tr>` : ""; }).join("");
+      const bucket = res.bucketMillisPerRound || [];
+      return `${head}<div class="row2"><div class="panel"><header><h2>参数</h2></header>${kv([["实例", esc(r.instance)], ["角色", esc(r.character)], ["遭遇", `<a href="${href("/encounter/" + r.encounter, f)}">${esc(r.encounter)}</a>`], ["种子", esc(r.seed)], ["场数", r.rounds], ["分桶", `${r.bucket} 场/桶`], ["拦截点", r.patches ?? "–"], ["总耗时", `${fmt(res.totalMillis / 1000, 2)} s`], ["分配", `${fmt(res.allocatedBytes / 1e6, 0)} MB`], ["GC 0/1/2", res.gc ? `${res.gc.gen0}/${res.gc.gen1}/${res.gc.gen2}` : "–"], ["Pump", res.pump ? `posted ${res.pump.posted} · drained ${res.pump.drained}` : "–"], ["选牌点", res.selector ?? "–"]])}</div><div class="panel"><header><h2>记录</h2></header>${meta}</div></div>
+        <div class="panel"><header><h2>动作耗时</h2><div class="cap">µs</div></header><div class="tablewrap"><table><thead><tr><th>动作</th><th class="num">次数</th><th class="num">中位</th><th class="num">p95</th><th class="num">最小</th><th class="num">最大</th></tr></thead><tbody>${stats}</tbody></table></div></div>
+        ${bucket.length ? figureWithTable("bucket", "分桶耗时", `<span>每 ${r.bucket} 场一桶，ms/场</span>`, columns(bucket, "ms", "桶"), columnsTable(bucket, "ms/场", "桶")) : ""}`;
+    }
+    if (r.kind === "warmup") {
+      const curve = (r.result || {}).millisPerRound || [];
+      return `${head}<div class="row2"><div class="panel"><header><h2>参数</h2></header>${kv([["实例", esc(r.instance)], ["遭遇", `<a href="${href("/encounter/" + r.encounter, f)}">${esc(r.encounter)}</a>`], ["批次", `${r.batches} × ${r.rounds} 场`], ["批间空闲", `${r.idle} s`], ["总耗时", `${fmt(r.wallSeconds, 0)} s`]])}</div><div class="panel"><header><h2>记录</h2></header>${meta}</div></div>${figureWithTable("warm", "热身曲线", `<span>ms/场</span>`, columns(curve, "ms", "批"), columnsTable(curve, "ms/场", "批"))}`;
+    }
+    if (r.kind === "models") {
+      const det = (run && run.detail) || { cards: [], encounters: [] };
+      const pools = {}; det.cards.forEach((c) => { pools[c.pool] = (pools[c.pool] || 0) + 1; });
+      return `${head}<div class="panel"><header><h2>记录</h2></header>${meta}</div><div class="row2 even"><div class="panel"><header><h2>牌池</h2><div class="cap">${det.cards.length} 张</div></header><div class="tablewrap"><table><thead><tr><th>牌池</th><th class="num">张数</th></tr></thead><tbody>${Object.entries(pools).sort().map(([p, n]) => `<tr><td class="id">${esc(p)}</td><td class="num">${n}</td></tr>`).join("")}</tbody></table></div></div><div class="panel"><header><h2>遭遇</h2><div class="cap">${det.encounters.length} 个 · <a href="${href("/encounters", f)}">覆盖页</a></div></header><div class="tablewrap"><table><thead><tr><th>ID</th><th>类型</th></tr></thead><tbody>${det.encounters.map((e) => `<tr><td class="id"><a href="${href("/encounter/" + e.id, f)}">${esc(e.id)}</a></td><td>${esc(e.type)}</td></tr>`).join("")}</tbody></table></div></div></div>`;
+    }
+    return `${head}<div class="panel">${meta}</div>`;
+  }
+
+  const replayCtl = { timer: null, speed: 1, key: null };
+  function stopReplay() { if (replayCtl.timer) { clearInterval(replayCtl.timer); replayCtl.timer = null; } replayCtl.key = null; const btn = $("[data-play]"); if (btn) btn.textContent = "▶"; }
+
+  function creatureCard(c, prev, isPlayer) {
+    const pct = c.maxHp ? Math.max(0, Math.min(100, (c.hp / c.maxHp) * 100)) : 0;
+    const bpct = c.maxHp ? Math.min(100, (c.block / c.maxHp) * 100) : 0;
+    const chg = (k) => prev && prev[k] !== c[k] ? "changed" : "";
+    const powers = c.powers.map((p) => `<span class="power ${prev && !(prev.powers || []).some((q) => q.id === p.id && q.amount === p.amount) ? "changed" : ""}">${esc(human(p.id))} ${p.amount}</span>`).join("");
+    return `<div class="creature ${c.alive ? "" : "dead"}"><div class="name"><b>${esc(c.name)}</b>${isPlayer ? "" : `<span class="intent ${chg("nextMove")}">${c.nextMove ? "意图 " + esc(human(c.nextMove)) : "—"}</span>`}</div><div class="hp"><div class="hpbar"><i style="width:${pct.toFixed(1)}%"></i>${c.block ? `<i class="block" style="width:${bpct.toFixed(1)}%"></i>` : ""}</div><span class="${chg("hp")}">${c.hp}/${c.maxHp}${c.block ? ` <span class="${chg("block")}">🛡 ${c.block}</span>` : ""}</span></div>${powers ? `<div class="powers">${powers}</div>` : ""}</div>`;
+  }
+  function pileBlock(name, cards, f, open) {
+    return `<details class="pile" ${open ? "open" : ""}><summary>${name} <b>${cards.length}</b></summary><div class="chips">${cards.map((c) => cardChip(c, f)).join("") || `<span class="muted">空</span>`}</div></details>`;
+  }
+
+  async function pageReplay(route, f) {
+    const id = route.parts[1], ci = parseInt(route.parts[2], 10) || 0, k = parseInt(route.parts[3], 10) || 0;
+    let run = null;
+    try { run = await loadRun(id); } catch (e) { return loadFail(id, f); }
+    const cases = run && run.detail && run.detail.cases;
+    if (!cases || !cases[ci] || !Array.isArray(cases[ci].steps)) return `<div class="empty">这一场没有回放数据（早于回放记录功能的运行） · <a href="${href("/run/" + id, f)}">返回运行记录</a></div>`;
+    const c = cases[ci];
+    const n = c.steps.length;
+    const kk = Math.max(0, Math.min(n, k));
+    const stateAt = (i) => i === 0 ? c.initial : c.steps[i - 1].state;
+    const st = stateAt(kk), prev = kk > 0 ? stateAt(kk - 1) : null;
+    const step = kk > 0 ? c.steps[kk - 1] : null;
+    const me = st.players[0], pme = prev ? prev.players[0] : null;
+    const at = (i) => href(`/run/${id}/${ci}/${i}`, f);
+    const ticks = [`<a class="tick start ${kk === 0 ? "cur" : "done"} ${c.initialDiffs && c.initialDiffs.length ? "mismatch" : ""}" href="${at(0)}" data-focus="tick-0" aria-label="开局" data-tip="${esc(tipHead("开局") + tipRow(fmtUs(c.startMicros), "工作台开局"))}"></a>`]
+      .concat(c.steps.map((s, i) => { const a = s.action; const label = a.kind === "play" ? `打出 ${human(a.card)}${a.target != null ? " → 敌 " + (a.target + 1) : ""}` : "结束回合"; return `<a class="tick ${a.kind} ${s.diffs.length ? "mismatch" : ""} ${i + 1 === kk ? "cur" : i + 1 < kk ? "done" : ""}" href="${at(i + 1)}" data-focus="tick-${i + 1}" aria-label="第 ${i + 1} 步 ${esc(label)}${s.diffs.length ? " 不一致" : ""}" data-tip="${esc(tipHead(`第 ${i + 1} 步 · 回合 ${s.state.players[0].turn}`) + tipRow(label, "") + tipRow(fmtUs(s.micros.wb), "工作台") + tipRow(fmtUs(s.micros.dev), "真实流程"))}"></a>`; })).join("");
+    const tlLegend = `<div class="tl-legend"><span><i style="background:var(--axis)"></i>开局</span><span><i style="background:var(--seq-2)"></i>打出</span><span><i style="background:var(--s2)"></i>结束回合</span><span><i style="background:var(--critical)"></i>不一致</span><span class="muted">← → 逐步 · 空格 播放 · Home/End</span></div>`;
+    let banner;
+    if (kk === 0) banner = `<div class="banner ${c.initialDiffs.length ? "mismatch" : ""}">开局 · ${esc(human(c.encounter))} · 种子 ${esc(c.seed)}${c.initialDiffs.length ? " · 开局状态不一致" : ""}<span class="micros">工作台开局 ${fmtUs(c.startMicros)}</span></div>`;
+    else {
+      const a = step.action;
+      const played = a.kind === "play" ? cardChip({ id: a.card, cost: prev.players[0].hand[a.hand] ? prev.players[0].hand[a.hand].cost : "", costsX: prev.players[0].hand[a.hand] ? prev.players[0].hand[a.hand].costsX : false, upgrade: a.upgrade }, f, "played") : "";
+      const target = a.kind === "play" && a.target != null && prev.enemies[a.target] ? ` → ${esc(prev.enemies[a.target].name)}` : "";
+      banner = `<div class="banner ${step.diffs.length ? "mismatch" : a.kind}">第 ${kk} 步 · 回合 ${me.turn} · ${a.kind === "play" ? `打出 ${played}${target}` : "结束回合 → 敌方回合 → 新回合"}${step.diffs.length ? " · 此步出现不一致" : ""}<span class="micros">工作台 ${fmtUs(step.micros.wb)} · 真实流程 ${fmtUs(step.micros.dev)}</span></div>`;
+    }
+    const rngRows = Object.entries(st.rng).map(([name, v]) => { const d = prev ? v.counter - prev.rng[name].counter : 0; return `<div><span>${esc(name)}</span><span><b>${v.counter}</b> <span class="d ${d ? "chg" : ""}">${d ? "+" + d : ""}</span></span></div>`; }).join("");
+    const energyPips = Array.from({ length: Math.max(me.energy, 3) }, (_, i) => `<i class="${i < me.energy ? "" : "off"}"></i>`).join("");
+    const diffsHtml = (kk === 0 ? c.initialDiffs : step.diffs).map((d) => `<div class="id">${esc(d.path)}: 真实 <b>${esc(JSON.stringify(d.dev))}</b> · 工作台 <b>${esc(JSON.stringify(d.wb))}</b></div>`).join("");
+    const handPrev = kk > 0 && step.action.kind === "play" ? step.action.hand : -1;
+    return `${crumbs([{ text: "总览", href: href("/", f) }, { text: "运行记录", href: href("/runs", f, { kind: "diff" }) }, { text: short(run.ts), href: href("/run/" + id, f) }, { text: `第 ${ci + 1} 场` }])}
+      <div class="replay">
+        <div class="replay-head"><div><h1>${esc(human(c.encounter))} <span class="id">${esc(c.encounter)} · 种子 ${esc(c.seed)}</span></h1><div class="cap"><span>${outcomeText[c.outcome] || ""} · ${n} 步 · ${c.turns ?? "?"} 回合 · 剩余 HP ${c.hpLeft ?? "?"}</span>${c.mismatches ? `<span class="state fail">${badIcon}${c.mismatches} 处不一致</span>` : `<span class="state pass">${okIcon}逐步一致</span>`}<a href="${href("/encounter/" + c.encounter, f)}">此遭遇的全部对局</a>${ci > 0 ? `<a href="${href(`/run/${id}/${ci - 1}/0`, f)}">‹ 上一场</a>` : ""}${ci + 1 < cases.length ? `<a href="${href(`/run/${id}/${ci + 1}/0`, f)}">下一场 ›</a>` : ""}</div></div>
+          <div class="controls"><a class="btn" href="${at(0)}" data-focus="first" aria-label="开局" title="开局">⏮</a><a class="btn" href="${at(Math.max(0, kk - 1))}" data-focus="prev" aria-label="上一步" title="上一步 (←)">◀</a><button class="btn" data-play data-focus="play" aria-label="播放或暂停" title="播放/暂停 (空格)">${replayCtl.timer ? "⏸" : "▶"}</button><a class="btn" href="${at(Math.min(n, kk + 1))}" data-focus="next" aria-label="下一步" title="下一步 (→)">▶|</a><a class="btn" href="${at(n)}" data-focus="last" aria-label="结局" title="结局">⏭</a><span class="count" aria-live="polite">${kk} / ${n}</span><select data-speed data-focus="speed" aria-label="播放速度">${[0.5, 1, 2, 4].map((s) => `<option value="${s}" ${s === replayCtl.speed ? "selected" : ""}>${s}×</option>`).join("")}</select></div>
+        </div>
+        <div class="timeline">${ticks}</div>
+        ${tlLegend}
+        ${banner}
+        ${diffsHtml ? `<div class="panel" style="border-color:var(--critical)"><header><h2>不一致</h2></header><div class="list">${diffsHtml}</div></div>` : ""}
+        <div class="board">
+          <div class="panel"><header><h2>敌方</h2><div class="cap">${st.side === "Enemy" ? "敌方回合" : "我方回合"} · 第 ${st.round} 轮</div></header><div class="creatures">${st.enemies.map((e, i) => creatureCard(e, prev ? prev.enemies[i] : null, false)).join("")}</div></div>
+          <div class="panel"><header><h2>我方</h2><div class="cap">回合 ${me.turn} · ${esc(me.phase)}</div></header><div class="creatures">${creatureCard(me.creature, pme ? pme.creature : null, true)}</div><div class="stats" style="margin-top:8px"><span>能量 <span class="energy ${pme && pme.energy !== me.energy ? "changed" : ""}">${energyPips}</span> <b>${me.energy}</b></span>${me.stars ? `<span>星 <b>${me.stars}</b></span>` : ""}<span>金币 <b>${me.gold}</b></span><span>遗物 ${me.relics.map((r) => `<span class="power">${esc(human(r))}</span>`).join(" ")}</span></div></div>
+        </div>
+        <div class="panel"><header><h2>手牌</h2><div class="cap">${me.hand.length} 张 · 可打 ${me.playable.filter(Boolean).length}</div></header><div class="chips">${me.hand.map((cd, i) => cardChip(cd, f, me.playable[i] ? "" : "dim")).join("") || `<span class="muted">空</span>`}</div>${handPrev >= 0 ? `<div class="cap" style="margin-top:8px">上一手牌：${prev.players[0].hand.map((cd, i) => cardChip(cd, f, i === handPrev ? "played" : "dim")).join("")}</div>` : ""}</div>
+        <div class="row2 even">
+          <div class="panel"><header><h2>牌堆</h2></header><div class="piles">${pileBlock("抽牌堆（顶→底）", me.draw, f, false)}${pileBlock("弃牌堆", me.discard, f, false)}${pileBlock("消耗堆", me.exhaust, f, false)}${me.play.length ? pileBlock("打出中", me.play, f, true) : ""}</div></div>
+          <div class="panel"><header><h2>RNG 计数器</h2><div class="cap">相对上一步的增量</div></header><div class="rng">${rngRows}</div></div>
+        </div>
+      </div>`;
+  }
+
+  async function allDiffDetails(f) {
+    const diffs = inWindow(inVersion(store.index, f).filter((r) => r.kind === "diff"), f).filter((r) => r.replay);
+    const out = [];
+    for (const d of diffs) { try { const run = await loadRun(d.id); if (run) out.push(run); } catch (e) { out.push(d); } }
+    return out;
+  }
+
+  async function pageCards(route, f) {
+    const D = derive(store.index, f);
+    const models = await modelsFor(D);
+    const pool = route.q.get("pool") || "IRONCLAD_CARD_POOL";
+    const pools = [...new Set(models.cards.map((c) => c.pool))].sort();
+    const items = models.cards.filter((c) => c.pool === pool);
+    const tabs = pools.map((p) => `<a href="${href("/cards", f, { pool: p === "IRONCLAD_CARD_POOL" ? null : p })}" aria-current="${p === pool}">${esc(human(p.replace("_CARD_POOL", "")))}</a>`).join("");
+    return `${filterBar(route, f)}<div class="panel"><header><h2>牌</h2><div class="cap"><span class="seg">${tabs}</span></div></header></div>${coverage("cards", esc(human(pool.replace("_CARD_POOL", ""))) + " 牌覆盖", items, D.cards, f, "card", cardTip, cardCols, modelsHint(models, "牌池"))}`;
+  }
+  async function pageEncounters(route, f) {
+    const D = derive(store.index, f);
+    const models = await modelsFor(D);
+    return `${filterBar(route, f)}${coverage("encs", "遭遇覆盖", models.encounters, D.encounters, f, "encounter", encTip, encCols, modelsHint(models, "遭遇"))}`;
+  }
+
+  async function pageCard(route, f) {
+    const id = route.parts[1];
+    const D = derive(store.index, f);
+    const models = await modelsFor(D);
+    const model = models.cards.find((c) => c.id === id);
+    const runs = await allDiffDetails(f);
+    const plays = [];
+    for (const run of runs) {
+      const cases = (run.detail && run.detail.cases) || [];
+      cases.forEach((c, ci) => (Array.isArray(c.steps) ? c.steps : []).forEach((s, si) => { if (s.action.kind === "play" && s.action.card === id) plays.push({ run, ci, si: si + 1, c, s }); }));
+    }
+    const rows = plays.slice().reverse().map((p) => `<tr><td class="muted"><a href="${href("/run/" + p.run.id, f)}">${short(p.run.ts)}</a></td><td class="id"><a href="${href("/encounter/" + p.c.encounter, f)}">${esc(p.c.encounter)}</a></td><td class="id">${esc(p.c.seed)}</td><td class="num">${p.s.state.players[0].turn}</td><td>${p.s.action.target != null && p.s.state.enemies[p.s.action.target] ? esc(p.s.state.enemies[p.s.action.target].name) : "—"}</td><td class="num">${fmtUs(p.s.micros.wb)}</td><td>${state(p.s.diffs.length > 0, 1)}</td><td><a class="btn" href="${href(`/run/${p.run.id}/${p.ci}/${p.si}`, f)}">回放此步</a></td></tr>`).join("");
+    const stat = D.cards[id] || { n: 0, fail: false, cases: [] };
+    return `${filterBar(route, f)}${crumbs([{ text: "总览", href: href("/", f) }, { text: "牌", href: href("/cards", f, { pool: model && model.pool !== "IRONCLAD_CARD_POOL" ? model.pool : null }) }, { text: id }])}<h1>${esc(human(id))}<span class="id">${esc(id)}</span></h1>
+      <div class="row2"><div class="panel"><header><h2>模型</h2></header>${model ? kv([["牌池", esc(model.pool)], ["类型", esc(model.type)], ["稀有度", esc(model.rarity)], ["费用", model.costsX ? "X" : model.cost], ["目标", esc(model.target)]]) : `<span class="muted">当前版本的牌池快照里没有这张牌</span>`}</div><div class="panel"><header><h2>验证（窗口内）</h2></header>${kv([["打出并核对", `${stat.n} 次`], ["状态", state(stat.fail, stat.n)], ["有逐场记录的对局", `${stat.cases.length} 场`], ["有回放的打出", `${plays.length} 次`]])}</div></div>
+      <div class="panel"><header><h2>每次打出</h2><div class="cap">窗口内 ${plays.length} 次有回放</div></header><div class="tablewrap"><table><thead><tr><th>时间</th><th>遭遇</th><th>种子</th><th class="num">回合</th><th>目标</th><th class="num">工作台耗时</th><th>一致性</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="8" class="empty">窗口内没有带回放的打出记录</td></tr>`}</tbody></table></div></div>`;
+  }
+  async function pageEncounter(route, f) {
+    const id = route.parts[1];
+    const D = derive(store.index, f);
+    const models = await modelsFor(D);
+    const model = models.encounters.find((e) => e.id === id);
+    const st = D.encounters[id] || { n: 0, steps: 0, fail: false, cases: [] };
+    const benches = D.benches.filter((b) => b.encounter === id);
+    const rows = st.cases.slice().reverse().map((c) => `<tr><td class="muted"><a href="${href("/run/" + c.run, f)}">${short(c.ts)}</a></td><td class="id">${esc(c.seed)}</td><td class="num">${c.steps}</td><td>${outcomeText[c.outcome] || "–"}</td><td>${state(c.mismatches > 0, c.steps)}</td><td>${c.replay ? `<a class="btn" href="${href(`/run/${c.run}/${c.ci}/0`, f)}">回放</a>` : `<span class="muted">无回放数据</span>`}</td></tr>`).join("");
+    const brows = benches.slice().reverse().map((b) => `<tr><td class="muted"><a href="${href("/run/" + b.id, f)}">${short(b.ts)}</a></td><td class="num">${b.rounds}</td><td class="num">${fmt(b.result.plays.median, 0)}</td><td class="num">${fmt((b.result.endTurns || {}).median, 0)}</td><td class="num">${fmt((b.result.starts || {}).median, 0)}</td></tr>`).join("");
+    return `${filterBar(route, f)}${crumbs([{ text: "总览", href: href("/", f) }, { text: "遭遇", href: href("/encounters", f) }, { text: id }])}<h1>${esc(human(id))}<span class="id">${esc(id)}</span></h1>
+      <div class="row2"><div class="panel"><header><h2>模型</h2></header>${model ? kv([["类型", esc(model.type)]]) : `<span class="muted">当前版本的遭遇快照里没有它</span>`}</div><div class="panel"><header><h2>验证</h2></header>${kv([["对局", `${st.n} 场`], ["步数", fmt(st.steps)], ["状态", state(st.fail, st.n)]])}</div></div>
+      <div class="panel"><header><h2>对局</h2></header><div class="tablewrap"><table><thead><tr><th>时间</th><th>种子</th><th class="num">步数</th><th>结果</th><th>一致性</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="empty">窗口内没有对局</td></tr>`}</tbody></table></div></div>
+      <div class="panel"><header><h2>Bench</h2><div class="cap">µs 中位</div></header><div class="tablewrap"><table><thead><tr><th>时间</th><th class="num">场数</th><th class="num">出牌</th><th class="num">结束回合</th><th class="num">开局</th></tr></thead><tbody>${brows || `<tr><td colspan="5" class="empty">窗口内没有 bench</td></tr>`}</tbody></table></div></div>`;
+  }
+  function pageInstances() {
+    const st = store.status;
+    if (!st) return `<div class="empty">快照里没有实例状态</div>`;
+    const rows = st.instances.map((i) => `<tr><td class="id">${esc(i.name)}</td><td>${statusPill(i)}</td><td class="num">${i.pid ?? "–"}</td><td>${i.ready ? "是" : "否"}</td><td>${i.busy ? "是" : "否"}</td></tr>`).join("");
+    return `<div class="panel"><header><h2>实例</h2><div class="cap">${esc(st.root || "")} · ${short(st.generatedAt)}</div></header><div class="tablewrap"><table><thead><tr><th>名称</th><th>状态</th><th class="num">PID</th><th>harness 就绪</th><th>执行中</th></tr></thead><tbody>${rows || `<tr><td colspan="5" class="empty">没有实例</td></tr>`}</tbody></table></div><p class="muted">wb = 工作台（TestMode，直驱规则），dev = 真实流程（oracle）。启动：<code>just headless start wb</code> / <code>just headless start dev</code>。</p></div>`;
+  }
+
+  let renderSeq = 0;
+  async function render() {
+    const route = parseHash();
+    const f = filtersFrom(route.q);
+    renderNav(route); renderStatus();
+    const seq = ++renderSeq;
+    const head = route.parts[0] || "";
+    const replayKey = head === "run" && route.parts.length >= 4 ? `${route.parts[1]}/${route.parts[2]}` : null;
+    if (!replayKey || replayCtl.key !== replayKey) stopReplay();
+    const focusKey = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.focus : null;
+    let html;
+    try {
+      if (head === "") html = await pageDash(route, f);
+      else if (head === "runs") html = pageRuns(route, f);
+      else if (head === "run" && route.parts.length >= 4) html = await pageReplay(route, f);
+      else if (head === "run") html = await pageRun(route, f);
+      else if (head === "cards") html = await pageCards(route, f);
+      else if (head === "encounters") html = await pageEncounters(route, f);
+      else if (head === "card") html = await pageCard(route, f);
+      else if (head === "encounter") html = await pageEncounter(route, f);
+      else if (head === "instances") html = pageInstances();
+      else html = `<div class="empty">没有这个页面 · <a href="#/">回总览</a></div>`;
+    } catch (e) { html = `<div class="empty">渲染失败：${esc(e.message)}</div>`; }
+    if (seq !== renderSeq) return;
+    const main = $("#main");
+    main.innerHTML = html;
+    bind(main, route, f);
+    if (focusKey) { const el = main.querySelector(`[data-focus="${CSS.escape(focusKey)}"]`); if (el) el.focus({ preventScroll: true }); }
+  }
+
+  function bind(main, route, f) {
+    const tables = tablesOf(route);
+    main.querySelectorAll("[data-toggle]").forEach((btn) => {
+      const id = btn.dataset.toggle;
+      const apply = (showTable) => { const grid = document.getElementById(id + "-grid"), table = document.getElementById(id + "-table"); table.hidden = !showTable; grid.hidden = showTable; btn.textContent = showTable ? "图" : "表格"; btn.setAttribute("aria-pressed", String(showTable)); };
+      apply(tables.has(id));
+      btn.addEventListener("click", () => {
+        if (tables.has(id)) tables.delete(id); else tables.add(id);
+        apply(tables.has(id));
+        const extra = { ...pageParams(route), tables: [...tables].join(",") || null };
+        history.replaceState(null, "", href(route.path, f, extra));
+      });
+    });
+    const vsel = main.querySelector("[data-version]");
+    if (vsel) vsel.addEventListener("change", () => { location.hash = href(route.path, { ...f, version: vsel.value }, pageParams(route)); });
+    const play = main.querySelector("[data-play]");
+    if (play) play.addEventListener("click", () => { if (replayCtl.timer) { stopReplay(); play.textContent = "▶"; } else startReplay(route, f, play); });
+    const speed = main.querySelector("[data-speed]");
+    if (speed) speed.addEventListener("change", () => { replayCtl.speed = parseFloat(speed.value); if (replayCtl.timer) { stopReplay(); startReplay(route, f, play); } });
+  }
+  function startReplay(route, f, btn) {
+    const id = route.parts[1], ci = route.parts[2];
+    btn.textContent = "⏸";
+    replayCtl.key = `${id}/${ci}`;
+    replayCtl.timer = setInterval(() => {
+      const r = parseHash(); if (r.parts[0] !== "run" || r.parts[1] !== id || r.parts[2] !== ci) { stopReplay(); return; }
+      const k = parseInt(r.parts[3], 10) || 0;
+      const run = store.runs.get(id); const n = run && run.detail && run.detail.cases[ci] ? run.detail.cases[ci].steps.length : 0;
+      if (k >= n) { stopReplay(); return; }
+      location.hash = href(`/run/${id}/${ci}/${k + 1}`, f);
+    }, 900 / replayCtl.speed);
+  }
+  document.addEventListener("keydown", (e) => {
+    const r = parseHash(); if (r.parts[0] !== "run" || r.parts.length < 4 || e.target.matches("input, select, textarea")) return;
+    const f = filtersFrom(r.q); const k = parseInt(r.parts[3], 10) || 0;
+    const run = store.runs.get(r.parts[1]); const n = run && run.detail && run.detail.cases[r.parts[2]] ? run.detail.cases[r.parts[2]].steps.length : 0;
+    if (e.key === "ArrowLeft") { location.hash = href(`/run/${r.parts[1]}/${r.parts[2]}/${Math.max(0, k - 1)}`, f); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { location.hash = href(`/run/${r.parts[1]}/${r.parts[2]}/${Math.min(n, k + 1)}`, f); e.preventDefault(); }
+    else if (e.key === " ") { const btn = $("[data-play]"); if (btn) btn.click(); e.preventDefault(); }
+    else if (e.key === "Home") { location.hash = href(`/run/${r.parts[1]}/${r.parts[2]}/0`, f); e.preventDefault(); }
+    else if (e.key === "End") { location.hash = href(`/run/${r.parts[1]}/${r.parts[2]}/${n}`, f); e.preventDefault(); }
+  });
+
+  const tip = $("#tip");
+  const clearHot = () => document.querySelectorAll("svg g.hot").forEach((g) => g.classList.remove("hot"));
+  function hideTip() { tip.style.display = "none"; clearHot(); }
+  function showTip(t, cx, cy) {
+    const g = t.closest("svg g"); if (g && (t.matches("a") || t.classList.contains("band"))) g.classList.add("hot");
+    tip.innerHTML = t.dataset.tip; tip.style.display = "block";
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.min(cx + 14, window.innerWidth - w - 8) + "px";
+    tip.style.top = (cy + 18 + h > window.innerHeight ? cy - h - 10 : cy + 18) + "px";
+  }
+  document.addEventListener("mousemove", (e) => { const t = e.target.closest && e.target.closest("[data-tip]"); clearHot(); if (!t) { tip.style.display = "none"; return; } showTip(t, e.clientX, e.clientY); });
+  document.addEventListener("focusin", (e) => { const t = e.target.closest && e.target.closest("[data-tip]"); clearHot(); if (!t) { tip.style.display = "none"; return; } const r = t.getBoundingClientRect(); showTip(t, r.left + r.width / 2, r.top + r.height / 2); });
+  document.addEventListener("focusout", hideTip);
+  document.addEventListener("scroll", hideTip, true);
+  document.addEventListener("mouseleave", hideTip);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
+  window.addEventListener("hashchange", render);
+
+  async function poll() {
+    let index = null, status = null;
+    try { index = await fetchJson("data/index.json"); } catch (err) { index = null; }
+    try { status = await fetchJson("data/status.json"); } catch (err) { status = null; }
+    if (index) {
+      const key = JSON.stringify([index.length, index.length ? index[index.length - 1].id : null, (status ? status.instances : []).map((i) => [i.name, i.alive, i.ready])]);
+      const changed = key !== poll.last;
+      poll.last = key; store.index = index; store.status = status;
+      if (changed) render(); else renderStatus();
+    } else if (!poll.last) { $("#main").innerHTML = `<div class="empty">监视服务失联 — 请确认 <code>just monitor</code> 在跑</div>`; }
+    if (!index || !status) $("#status").innerHTML = `<span class="pill off"><i></i>${index ? "实例状态不可用" : "监视服务失联"}</span>`;
+    setTimeout(poll, 3000);
+  }
+  if (store.live) poll(); else render();
+})();
+</script>

@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+.idea/
+.godot/
+.local/
+local.props
+*.user
+*.log
+TestResults/
+target/
+__pycache__/

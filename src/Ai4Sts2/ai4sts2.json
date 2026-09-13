@@ -1,0 +1,17 @@
+{
+  "id": "ai4sts2",
+  "name": "ai4sts2",
+  "author": "yifen9",
+  "description": "Combat route solver.",
+  "version": "0.0.1",
+  "has_pck": false,
+  "has_dll": true,
+  "affects_gameplay": false,
+  "min_game_version": "0.111.0",
+  "dependencies": [
+    {
+      "id": "STS2-RitsuLib",
+      "min_version": "0.5.20"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "monitor",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/monitor.py", "--port", "9418"],
+      "port": 9418
+    }
+  ]
+}
