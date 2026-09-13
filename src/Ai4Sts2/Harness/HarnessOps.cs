@@ -75,6 +75,7 @@ public static class HarnessOps
             "wb.restore" => Result(WorkbenchRestore(request.Args)),
             "wb.search" => Result(WorkbenchSearch(request.Args)),
             "wb.view" => Result(WorkbenchView(request.Args)),
+            "wb.map" => Result(Session.Instance.Flow.MapSnapshot()),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
             "wb.take" => Result(WorkbenchTake(request.Args)),

@@ -27,6 +27,59 @@ def choose_point(view, hp, max_hp, floor):
     return choices[0]
 
 
+ROUTE_VALUE = {"Monster": 30, "Elite": 110, "Unknown": 25, "Ancient": 25, "Shop": 20, "Treasure": 90}
+ROUTE_LOSS = {"Monster": 0.08, "Elite": 0.22, "Unknown": 0.03, "Ancient": 0.03}
+
+
+def plan_route(map_view, ratio, gold):
+    points = {(p["col"], p["row"]): p for p in map_view["points"]}
+    memo = {}
+
+    def best(coord, hp):
+        key = (coord, round(hp, 2))
+        if key in memo:
+            return memo[key]
+        point = points[coord]
+        kind = point["type"]
+        value = ROUTE_VALUE.get(kind, 0)
+        if kind == "Elite" and hp < 0.55:
+            value = -80
+        if kind == "RestSite":
+            if hp < 0.7:
+                value = 60 * (1 - hp)
+                hp = min(1.0, hp + 0.3)
+            else:
+                value = 35
+        elif kind == "Shop":
+            value = 20 if gold >= 120 else 5
+        hp -= ROUTE_LOSS.get(kind, 0.0)
+        if hp <= 0.15:
+            value -= 500
+        children = [tuple(c) for c in point["children"]]
+        if not children or kind == "Boss":
+            memo[key] = (value + hp * 250, None)
+            return memo[key]
+        total, child = max((best(c, hp)[0], c) for c in children)
+        memo[key] = (value + total, child)
+        return memo[key]
+
+    return {(c["col"], c["row"]): best((c["col"], c["row"]), ratio)[0] for c in map_view["choices"]}
+
+
+def choose_route(wb, view, weak, gold, floor):
+    try:
+        map_view = wb.call("wb.map")
+    except HarnessError:
+        return choose_point(view, weak["hp"], weak["maxHp"], floor), None
+    map_view["choices"] = view["choices"]
+    scores = plan_route(map_view, weak["hp"] / max(1, weak["maxHp"]), gold)
+    if not scores:
+        return choose_point(view, weak["hp"], weak["maxHp"], floor), None
+    coord = max(scores, key=scores.get)
+    choice = next(c for c in view["choices"] if (c["col"], c["row"]) == coord)
+    return choice, {f"{k[0]},{k[1]}": round(v, 1) for k, v in scores.items()}
+
+
 def autoplay(wb, a, hard=False):
     return wb.call(
         "wb.autoplay",
@@ -127,7 +180,9 @@ def handle_rest(wb, a, entry, v, players):
     before_boss = v["actFloor"] >= 14
     threshold = 0.85 if before_boss else 0.6
     options = []
+    upgraded = []
     for slot, p in enumerate(players):
+        upgraded.append(None)
         if p["hp"] <= 0:
             options.append(None)
             continue
@@ -141,14 +196,15 @@ def handle_rest(wb, a, entry, v, players):
             best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
             if best is not None and best.get("index") is not None:
                 wb.call("selector.enqueue", {"choice": [best["index"]]})
+                upgraded[slot] = ev["best"]
         options.append(option)
     res = wb.call("wb.rest", {"options": options})
     entry["rest"] = {
         "option": options[0],
         "options": options,
         "ok": res["ok"],
-        "upgraded": entry.get("evaluation", {}).get("best"),
-        "upgradedAll": [e.get("best") for e in entry.get("smithEvaluations", [])],
+        "upgraded": upgraded[0],
+        "upgradedAll": upgraded,
     }
 
 
@@ -252,7 +308,9 @@ def play_run(wb, a, seed):
         state = wb.call("run.state")
         me = state["players"][0]
         weak = weakest(state["players"])
-        choice = choose_point(view, weak["hp"], weak["maxHp"], view["floor"])
+        choice, route_scores = (
+            choose_route(wb, view, weak, me["gold"], view["floor"]) if view["choices"] else (None, None)
+        )
         if choice is None:
             outcome = "stuck"
             break
@@ -283,6 +341,7 @@ def play_run(wb, a, seed):
             "hpBefore": me["hp"],
             "hpBeforeAll": [p["hp"] for p in state["players"]],
             "choices": view["choices"],
+            "routeScores": route_scores,
             "pathEvaluation": path_eval,
         }
         alive = True

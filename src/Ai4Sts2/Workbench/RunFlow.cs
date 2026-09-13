@@ -16,6 +16,10 @@ namespace Ai4Sts2.Workbench;
 
 public sealed record MapChoice(int Col, int Row, string Type);
 
+public sealed record MapPointView(int Col, int Row, string Type, IReadOnlyList<int[]> Children);
+
+public sealed record MapView(int Act, int[]? Current, int[] Boss, IReadOnlyList<MapPointView> Points);
+
 public sealed record RewardView(
     int Index,
     string Kind,
@@ -67,6 +71,28 @@ public sealed class RunFlow(Session session)
         RunManager.Instance.GenerateRooms();
         session.Pump.Drive(() => RunManager.Instance.EnterAct(0, false), "enter act");
         run.ExtraFields.StartedWithNeow = false;
+    }
+
+    public MapView MapSnapshot()
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var map = run.Map;
+        var points = map.GetAllMapPoints()
+            .Append(map.BossMapPoint)
+            .Distinct()
+            .Where(p => p.PointType != MapPointType.Unassigned)
+            .OrderBy(p => p.coord.row)
+            .ThenBy(p => p.coord.col)
+            .Select(p => new MapPointView(
+                p.coord.col,
+                p.coord.row,
+                p.PointType.ToString(),
+                p.Children.OrderBy(c => c.coord.col).Select(c => new[] { c.coord.col, c.coord.row }).ToList()
+            ))
+            .ToList();
+        var current = run.CurrentMapCoord is { } c ? new[] { c.col, c.row } : null;
+        var boss = map.BossMapPoint.coord;
+        return new MapView(run.CurrentActIndex, current, [boss.col, boss.row], points);
     }
 
     public RunView View(int player = 0)
