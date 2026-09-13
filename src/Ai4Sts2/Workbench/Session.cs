@@ -51,7 +51,17 @@ public sealed class Session
     {
         if (Run is not null)
         {
-            ExitRooms(Run);
+            try
+            {
+                ExitRooms(Run);
+            }
+            catch (LeakedAwaitException)
+            {
+                while (Run.CurrentRoomCount > 0)
+                {
+                    _ = Run.PopCurrentRoom();
+                }
+            }
             RunManager.Instance.CleanUp(true);
             Run = null;
             _appendedHistory = false;
@@ -276,7 +286,30 @@ public sealed class Session
         while (run.CurrentRoomCount > 0)
         {
             var previous = run.PopCurrentRoom();
+            SettleOthers(run, previous);
             Pump.Drive(() => previous.Exit(run), "exit room");
+        }
+    }
+
+    private static void SettleOthers(RunState run, AbstractRoom room)
+    {
+        if (room is not RestSiteRoom || run.Players.Count < 2)
+        {
+            return;
+        }
+        var sync = RunManager.Instance.RestSiteSynchronizer;
+        foreach (var player in run.Players)
+        {
+            if (player.NetId == LocalContext.NetId)
+            {
+                continue;
+            }
+            var site = sync._restSites[run.GetPlayerSlotIndex(player)];
+            if (site.options.Count > 0)
+            {
+                site.options.Clear();
+                _ = site.completionTaskSource.TrySetResult();
+            }
         }
     }
 

@@ -3,6 +3,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.CardRewardAlternatives;
 using MegaCrit.Sts2.Core.Entities.Merchant;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Rewards;
@@ -161,14 +162,53 @@ public sealed class RunFlow(Session session)
         }
         var sync = RunManager.Instance.EventSynchronizer;
         session.DropSnapshots();
-        session.Pump.Drive(
-            async () =>
+        if (sync.IsShared)
+        {
+            session.Pump.Drive(
+                async () =>
+                {
+                    foreach (var other in Others(run))
+                    {
+                        sync.PlayerVotedForSharedOptionIndex(other, (uint)index, sync._pageIndex);
+                    }
+                    sync.ChooseLocalOption(index);
+                    await sync.AwaitPendingOptionTasks();
+                },
+                $"shared event option {index}"
+            );
+        }
+        else
+        {
+            session.Pump.Drive(
+                async () =>
+                {
+                    sync.ChooseLocalOption(index);
+                    await sync.AwaitPendingOptionTasks();
+                },
+                $"event option {index}"
+            );
+            foreach (var other in Others(run))
             {
-                sync.ChooseLocalOption(index);
-                await sync.AwaitPendingOptionTasks();
-            },
-            $"event option {index}"
-        );
+                var options = sync.GetEventForPlayer(other).CurrentOptions;
+                var pick =
+                    index < options.Count && !options[index].IsLocked && !options[index].IsProceed
+                        ? index
+                        : options.ToList().FindIndex(o => !o.IsLocked && !o.IsProceed);
+                if (pick < 0)
+                {
+                    continue;
+                }
+                using var scope = Session.ActAs(other);
+                session.Pump.Drive(
+                    async () =>
+                    {
+                        sync.ChooseOptionForEvent(other, pick);
+                        await sync.AwaitPendingOptionTasks();
+                    },
+                    $"event option {pick} for {other.NetId}"
+                );
+            }
+        }
         if (CombatManager.Instance.IsInProgress)
         {
             session.RequirePlayable(-1, "event combat");
@@ -223,6 +263,10 @@ public sealed class RunFlow(Session session)
             picked = relic.Id.Entry;
         }
         session.Pump.Run(sync.SkipRelicLocally);
+        foreach (var other in Others(run))
+        {
+            session.Pump.Run(() => sync.OnPicked(other, null));
+        }
         return picked;
     }
 
@@ -281,6 +325,10 @@ public sealed class RunFlow(Session session)
         {
             throw new ArgumentException($"no map point at {col},{row}");
         }
+        if (_offered.Count > 0)
+        {
+            MirrorRewards();
+        }
         _offered.Clear();
         session.DropSnapshots();
         session.Pump.Drive(() => RunManager.Instance.EnterMapCoord(coord), $"travel {col},{row}");
@@ -334,6 +382,10 @@ public sealed class RunFlow(Session session)
             );
         }
         session.Selector.CardReward = null;
+        if (RunManager.Instance.RewardsSetSynchronizer.IsRewardsSetCompleted(set))
+        {
+            MirrorRewards();
+        }
         return ok;
     }
 
@@ -361,6 +413,7 @@ public sealed class RunFlow(Session session)
         {
             session.Pump.Run(RunManager.Instance.RewardsSetSynchronizer.SkipLocalRewardsSet);
         }
+        MirrorRewards();
     }
 
     public bool Rest(string optionId)
@@ -375,12 +428,54 @@ public sealed class RunFlow(Session session)
         {
             throw new ArgumentException($"rest option {optionId} unavailable");
         }
+        var sync = RunManager.Instance.RestSiteSynchronizer;
         var ok = false;
-        session.Pump.Drive(
-            async () => ok = await RunManager.Instance.RestSiteSynchronizer.ChooseLocalOption(index),
-            $"rest {optionId}"
-        );
+        session.Pump.Drive(async () => ok = await sync.ChooseLocalOption(index), $"rest {optionId}");
+        foreach (var other in Others(run))
+        {
+            var options = sync.GetOptionsForPlayer(other).ToList();
+            var mirrored = options.FindIndex(o => o.OptionId == optionId);
+            var pick = mirrored >= 0 ? mirrored : 0;
+            if (options.Count > 0)
+            {
+                using var scope = Session.ActAs(other);
+                session.Pump.Drive(() => sync.ChooseOption(other, pick), $"rest {optionId} for {other.NetId}");
+            }
+        }
         return ok;
+    }
+
+    private static IEnumerable<Player> Others(RunState run) =>
+        run.Players.Where(p => p.NetId != LocalContext.NetId && p.Creature.IsAlive);
+
+    private void MirrorRewards()
+    {
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var sync = RunManager.Instance.RewardsSetSynchronizer;
+        foreach (var other in Others(run))
+        {
+            var state = sync.GetRewardStateForPlayer(other);
+            while (state.rewardsStack.Count > 0)
+            {
+                var top = state.rewardsStack[^1];
+                foreach (var reward in top.set.Rewards.ToList())
+                {
+                    if (reward is CardReward || reward.SuccessfullySelected)
+                    {
+                        continue;
+                    }
+                    using var scope = Session.ActAs(other);
+                    session.Pump.Drive(
+                        () => sync.SelectRewardForPlayer(top, reward),
+                        $"mirror reward for {other.NetId}"
+                    );
+                }
+                if (state.rewardsStack.Count > 0 && state.rewardsStack[^1] == top)
+                {
+                    _ = sync.SkipRewardsSetOnStackTopForPlayer(other);
+                }
+            }
+        }
     }
 
     private (RewardsSet Set, Task Done) Current()

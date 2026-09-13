@@ -4,6 +4,8 @@ using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
@@ -39,6 +41,14 @@ public static class Patches
         Prefix(harmony, typeof(SaveManager), "SaveRun", [typeof(AbstractRoom), typeof(bool)], nameof(SkipTask));
         Prefix(harmony, typeof(SaveManager), "SaveProgressFile", [], nameof(SkipVoid));
         Prefix(harmony, typeof(RunManager), "OnEnded", [typeof(bool)], nameof(SkipRunEnded));
+        Prefix(
+            harmony,
+            typeof(NGame),
+            "ScreenShake",
+            [typeof(ShakeStrength), typeof(ShakeDuration), typeof(float)],
+            nameof(SkipVoid)
+        );
+        Prefix(harmony, typeof(NGame), "ScreenShakeTrauma", [typeof(ShakeStrength)], nameof(SkipVoid));
         Prefix(harmony, typeof(CombatState), "get_Creatures", [], nameof(Creatures));
         Prefix(harmony, typeof(CombatState), "get_PlayerCreatures", [], nameof(PlayerCreatures));
         Prefix(harmony, typeof(CombatState), "get_Players", [], nameof(Players));
