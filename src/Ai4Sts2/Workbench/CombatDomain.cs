@@ -21,7 +21,7 @@ public sealed record SearchAction(string Kind, int Player, int Hand, int? Target
 
 public sealed class CombatDomain : ISearchDomain<SearchAction>
 {
-    private const int HpWeight = 15;
+    private static int HpWeight => Tuning.HpWeight;
     private readonly Dictionary<uint, int> _rootEnemyMaxHp = [];
     private readonly Dictionary<string, Threat> _threats = [];
     private readonly int _potionValue;

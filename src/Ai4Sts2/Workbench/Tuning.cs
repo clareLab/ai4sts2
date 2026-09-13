@@ -39,6 +39,8 @@ public static class Tuning
 
     public static int RateHorizon { get; set; } = 6;
 
+    public static int HpWeight { get; set; } = 15;
+
     public static bool FreezeMap { get; set; } = true;
 
     public static bool Spotlight { get; set; } = true;
