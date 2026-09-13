@@ -42,10 +42,10 @@ def plan_route(map_view, ratio, gold):
         point = points[coord]
         kind = point["type"]
         value = ROUTE_VALUE.get(kind, 0)
-        if kind == "Elite" and hp < 0.7:
+        if kind == "Elite" and hp < 0.55:
             value = -150
         if kind == "RestSite":
-            if hp < 0.75:
+            if hp < 0.7:
                 value = 60 * (1 - hp)
                 hp = min(1.0, hp + 0.3)
             else:
@@ -216,7 +216,7 @@ def weakest(players):
 
 def handle_rest(wb, a, entry, v, players):
     before_boss = v["actFloor"] >= 14
-    threshold = 0.85 if before_boss else 0.7
+    threshold = 0.85 if before_boss else 0.6
     options = []
     upgraded = []
     for slot, p in enumerate(players):
