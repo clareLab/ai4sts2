@@ -59,6 +59,9 @@ public static class HarnessOps
             "wb.state" => Result(CombatDump.Capture()),
             "wb.bench" => Result(WorkbenchBench(request.Args)),
             "wb.warmup" => WorkbenchWarmupAsync(host, request.Args),
+            "wb.census" => Result(Census.Run()),
+            "wb.snap" => Result(WorkbenchSnap()),
+            "wb.restore" => Result(WorkbenchRestore(request.Args)),
             _ => throw new NotSupportedException($"unknown op '{request.Op}'"),
         };
 
@@ -289,6 +292,26 @@ public static class HarnessOps
     {
         var elapsed = Session.Instance.EndTurn();
         return new { EndTurnMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
+    }
+
+    private static object WorkbenchSnap()
+    {
+        var (id, snap) = Session.Instance.Snap();
+        return new
+        {
+            Id = id,
+            Micros = snap.Elapsed.TotalMicroseconds,
+            snap.Objects,
+            snap.Arrays,
+            snap.Fields,
+        };
+    }
+
+    private static object WorkbenchRestore(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var stats = Session.Instance.Restore(a.GetProperty("id").GetInt32());
+        return new { Stats = stats, State = CombatDump.Capture() };
     }
 
     private static object WorkbenchBench(JsonElement? args)

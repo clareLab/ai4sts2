@@ -86,7 +86,46 @@ def pick_action(state, rng):
     return ("play", (h, target))
 
 
-def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng, played, case_played):
+def detour(wb, state, rng, length):
+    actions = []
+    for _ in range(length):
+        action = pick_action(state, rng)
+        if action is None:
+            break
+        kind, arg = action
+        if kind == "play":
+            h, t = arg
+            res = wb.call("wb.play", {"hand": h, "target": t})
+            actions.append({"kind": "play", "hand": h, "target": t, "card": state["players"][0]["hand"][h]["id"]})
+        else:
+            res = wb.call("wb.endturn")
+            actions.append({"kind": "end"})
+        state = res["state"]
+        if not state["inProgress"]:
+            break
+    return actions, state
+
+
+def restore_probe(wb, wb_state, rng, length, label):
+    snap = wb.call("wb.snap")
+    actions, detoured = detour(wb, wb_state, rng, length)
+    res = wb.call("wb.restore", {"id": snap["id"]})
+    d = diff(norm_state(wb_state), norm_state(res["state"]))
+    return {
+        "at": label,
+        "snapMicros": snap["micros"],
+        "objects": snap["objects"],
+        "arrays": snap["arrays"],
+        "fields": snap["fields"],
+        "detour": actions,
+        "detourEnded": not detoured["inProgress"],
+        "restoreMicros": res["stats"]["restoreMicros"],
+        "resyncMicros": res["stats"]["resyncMicros"],
+        "diffs": [{"path": p, "before": x, "after": y} for p, x, y in d[:40]],
+    }
+
+
+def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng, played, case_played, restore=None):
     t0 = time.time()
     dev.call("run.new", {"character": character, "seed": seed, "ascension": 0})
     wb.call("wb.run", {"character": character, "seed": seed, "ascension": 0})
@@ -107,6 +146,7 @@ def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng
         "steps": [],
         "rngStart": run["rng"],
         "startMicros": wb_start.get("startMicros"),
+        "restores": [],
     }
     d = diff(norm_state(dev_state), norm_state(wb_state))
     if d:
@@ -152,6 +192,16 @@ def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng
         trace["steps"].append(entry)
         if not dev_state["inProgress"]:
             break
+        if restore and rng is not None and (step + 1) % restore[0] == 0 and wb_state["players"][0]["phase"] == "Play":
+            probe = restore_probe(wb, wb_state, rng, restore[1], f"step {step + 1}")
+            trace["restores"].append(probe)
+            if probe["diffs"]:
+                mismatches.append(
+                    (f"restore@{step + 1}", [(x["path"], x["before"], x["after"]) for x in probe["diffs"]])
+                )
+                if verbose:
+                    for x in probe["diffs"][:12]:
+                        print(f"  restore@{step + 1}: {x['path']}: before={x['before']} after={x['after']}")
     trace["wallSeconds"] = round(time.time() - t0, 3)
     return steps, mismatches, trace
 
@@ -165,7 +215,10 @@ def main():
     ap.add_argument("--steps", type=int, default=60)
     ap.add_argument("-v", action="store_true")
     ap.add_argument("--random", type=int, default=None)
+    ap.add_argument("--restore-every", type=int, default=0)
+    ap.add_argument("--detour", type=int, default=6)
     a = ap.parse_args()
+    restore = (a.restore_every, a.detour) if a.restore_every > 0 else None
     a.character = a.character.upper()
     a.encounter = [e.upper() for e in a.encounter]
     a.seed = ",".join(s.strip() for s in a.seed.split(",") if s.strip())
@@ -186,7 +239,7 @@ def main():
         for seed in a.seed.split(","):
             case_played = collections.Counter()
             steps, mismatches, trace = run_case(
-                dev, wb, a.character, seed, enc, cards, a.steps, a.v, rng, played, case_played
+                dev, wb, a.character, seed, enc, cards, a.steps, a.v, rng, played, case_played, restore
             )
             total += len(steps)
             failed += len(mismatches)
@@ -202,6 +255,12 @@ def main():
                 "outcome": "mismatch"
                 if mismatches
                 else ("running" if final["inProgress"] else ("lost" if me and not me["creature"]["alive"] else "won")),
+                "restores": len(trace["restores"]),
+                "restoreMicros": round(
+                    sum(r["restoreMicros"] + r["resyncMicros"] for r in trace["restores"]) / len(trace["restores"]), 1
+                )
+                if trace["restores"]
+                else None,
                 "turns": me["turn"] if me else None,
                 "hpLeft": me["creature"]["hp"] if me else None,
             }
@@ -225,6 +284,7 @@ def main():
             "mismatches": failed,
             "played": dict(played),
             "replay": True,
+            "restore": {"every": restore[0], "detour": restore[1]} if restore else None,
             "patches": ping.get("patches"),
             "oracle": {"game": dev_ping.get("game"), "mod": dev_ping.get("mod"), "fastMode": dev_ping.get("fastMode")},
             "cases": cases,

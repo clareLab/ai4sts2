@@ -18,6 +18,8 @@ namespace Ai4Sts2.Workbench;
 public sealed class Session
 {
     private const ulong LocalNetId = 1;
+    private readonly Dictionary<int, Snapshot> _snaps = [];
+    private int _snapSeq;
     private IDisposable? _selectorScope;
 
     public ScriptSelector Selector { get; } = new();
@@ -76,6 +78,7 @@ public sealed class Session
     public CombatState StartEncounter(string encounterId, bool fullHeal)
     {
         var run = Run ?? throw new InvalidOperationException("run not set up");
+        _snaps.Clear();
         if (fullHeal)
         {
             foreach (var player in run.Players)
@@ -129,6 +132,23 @@ public sealed class Session
         _ = Pump.Drive(CombatManager.Instance.CheckWinCondition, "win check");
         return sw.Elapsed;
     }
+
+    public (int Id, Snapshot Snapshot) Snap()
+    {
+        var snap = Loader.Take();
+        var id = ++_snapSeq;
+        _snaps[id] = snap;
+        return (id, snap);
+    }
+
+    public RestoreStats Restore(int id)
+    {
+        return !_snaps.TryGetValue(id, out var snap)
+            ? throw new KeyNotFoundException($"snapshot {id} not found")
+            : Loader.Restore(snap, Pump);
+    }
+
+    public void DropSnapshots() => _snaps.Clear();
 
     public TimeSpan EndTurn()
     {

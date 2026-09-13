@@ -23,9 +23,9 @@ test:
     dotnet test {{sln}} --nologo
 
 fmt:
-    csharpier format .
     dotnet format style {{sln}} --no-restore
     dotnet format analyzers {{sln}} --no-restore
+    csharpier format .
     ruff format scripts
     ruff check --fix scripts
 
