@@ -52,7 +52,7 @@ def collect(paths, max_cases, characters):
 
 def setup(wb, case):
     spec = {"characters": [case["character"]], "seed": case["seed"], "ascension": 0, "net": case.get("net") or "single"}
-    wb.call("wb.run", spec)
+    wb.call("wb.run", {**spec, "map": True})
     wb.call("deck.set", {"cards": case["deck"], "player": 0})
     wb.call("relics.set", {"relics": case["relics"], "player": 0})
     wb.call("potions.set", {"potions": case["potions"], "player": 0})
