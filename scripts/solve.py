@@ -28,8 +28,8 @@ def play_line(wb, line):
     return steps, state
 
 
-def verify_on_oracle(dev, character, seed, encounter, cards, rng_start, steps):
-    dev.call("run.new", {"character": character, "seed": seed, "ascension": 0})
+def verify_on_oracle(dev, character, players, seed, encounter, cards, rng_start, steps):
+    dev.call("run.new", {"character": character, "players": players, "seed": seed, "ascension": 0})
     if cards:
         dev.call("deck.set", {"cards": cards})
     dev.call("run.rng.set", {"rng": rng_start})
@@ -38,10 +38,10 @@ def verify_on_oracle(dev, character, seed, encounter, cards, rng_start, steps):
     for entry in steps:
         a = entry["action"]
         if a["kind"] == "play":
-            res = dev.call("combat.play", {"hand": a["hand"], "target": a.get("target")})
+            res = dev.call("combat.play", {"player": a.get("player", 0), "hand": a["hand"], "target": a.get("target")})
             entry["micros"]["dev"] = res.get("playMicros")
         else:
-            res = dev.call("combat.endturn")
+            res = dev.call("combat.endturn", {"player": a.get("player", 0)})
             entry["micros"]["dev"] = res.get("endTurnMicros")
         dev_state = res["state"]
         d = diff(norm_state(dev_state), norm_state(entry["state"]))
@@ -58,11 +58,14 @@ def verify_on_oracle(dev, character, seed, encounter, cards, rng_start, steps):
 
 def solve_case(wb, dev, a, seed, encounter, cards):
     t0 = time.time()
-    wb.call("wb.run", {"character": a.character, "seed": seed, "ascension": 0})
+    wb.call("wb.run", {"character": a.character, "players": a.players, "seed": seed, "ascension": 0})
     if cards:
         wb.call("deck.set", {"cards": cards})
     rng_start = wb.call("run.state")["rng"]
-    start = wb.call("wb.start", {"character": a.character, "seed": seed, "encounter": encounter, "heal": True})
+    start = wb.call(
+        "wb.start",
+        {"character": a.character, "players": a.players, "seed": seed, "encounter": encounter, "heal": True},
+    )
     state = start["state"]
     trace = {
         "initial": state,
@@ -108,7 +111,7 @@ def solve_case(wb, dev, a, seed, encounter, cards):
             }
         )
         if not line:
-            line = [{"kind": "end", "hand": -1}]
+            line = [{"kind": "end", "player": 0, "hand": -1}]
         steps, state = play_line(wb, line)
         for s in steps:
             s["search"] = len(trace["searches"]) - 1
@@ -117,7 +120,7 @@ def solve_case(wb, dev, a, seed, encounter, cards):
         turns += 1
     mismatches = None
     if dev is not None:
-        mismatches = verify_on_oracle(dev, a.character, seed, encounter, cards, rng_start, trace["steps"])
+        mismatches = verify_on_oracle(dev, a.character, a.players, seed, encounter, cards, rng_start, trace["steps"])
         if mismatches:
             cut = next(i for i, s in enumerate(trace["steps"]) if s["diffs"])
             trace["steps"] = trace["steps"][: cut + 1]
@@ -150,6 +153,7 @@ def solve_case(wb, dev, a, seed, encounter, cards):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--character", default="IRONCLAD")
+    ap.add_argument("--players", type=int, default=1)
     ap.add_argument("--seed", default="AI4STS2")
     ap.add_argument("--encounter", action="append", default=[])
     ap.add_argument("--cards", default="")
@@ -207,6 +211,7 @@ def main():
         "solve",
         {
             "character": a.character,
+            "players": a.players,
             "encounters": encounters,
             "seeds": seeds,
             "deck": cards,

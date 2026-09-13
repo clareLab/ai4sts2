@@ -36,22 +36,26 @@ def norm_state(s):
         "players": [],
     }
     for p in s["players"]:
-        out["players"].append(
-            {
-                "turn": p["turn"],
-                "phase": p["phase"],
-                "energy": p["energy"],
-                "stars": p["stars"],
-                "creature": norm_creature(p["creature"]),
-                "hand": norm_cards(p["hand"]),
-                "playable": p["playable"],
-                "draw": norm_cards(p["draw"]),
-                "discard": norm_cards(p["discard"]),
-                "exhaust": norm_cards(p["exhaust"]),
-                "play": norm_cards(p["play"]),
-                "orbs": p["orbs"],
-            }
-        )
+        entry = {
+            "turn": p["turn"],
+            "phase": p["phase"],
+            "stars": p["stars"],
+            "creature": norm_creature(p["creature"]),
+            "orbs": p["orbs"],
+        }
+        if s["inProgress"]:
+            entry.update(
+                {
+                    "energy": p["energy"],
+                    "hand": norm_cards(p["hand"]),
+                    "playable": p["playable"],
+                    "draw": norm_cards(p["draw"]),
+                    "discard": norm_cards(p["discard"]),
+                    "exhaust": norm_cards(p["exhaust"]),
+                    "play": norm_cards(p["play"]),
+                }
+            )
+        out["players"].append(entry)
     return out
 
 
@@ -72,18 +76,21 @@ def diff(a, b, path=""):
 
 
 def pick_action(state, rng):
-    p = state["players"][0]
-    if not state["inProgress"] or p["phase"] != "Play":
+    if not state["inProgress"] or state["players"][0]["phase"] != "Play":
         return None
     alive = [i for i, e in enumerate(state["enemies"]) if e["alive"]]
-    playable = [h for h in range(len(p["hand"])) if p["playable"][h]]
-    if not playable or (rng is not None and rng.random() < 0.15):
-        return ("end", None)
-    h = playable[0] if rng is None else rng.choice(playable)
+    options = []
+    for pi, p in enumerate(state["players"]):
+        if p["phase"] != "Play" or not p["creature"]["alive"]:
+            continue
+        options += [(pi, h) for h in range(len(p["hand"])) if p["playable"][h]]
+    if not options or (rng is not None and rng.random() < 0.15):
+        return (0, "end", None)
+    pi, h = options[0] if rng is None else rng.choice(options)
     target = None
     if alive:
         target = alive[0] if rng is None else rng.choice(alive)
-    return ("play", (h, target))
+    return (pi, "play", (h, target))
 
 
 def detour(wb, state, rng, length):
@@ -92,14 +99,16 @@ def detour(wb, state, rng, length):
         action = pick_action(state, rng)
         if action is None:
             break
-        kind, arg = action
+        pi, kind, arg = action
         if kind == "play":
             h, t = arg
-            res = wb.call("wb.play", {"hand": h, "target": t})
-            actions.append({"kind": "play", "hand": h, "target": t, "card": state["players"][0]["hand"][h]["id"]})
+            res = wb.call("wb.play", {"player": pi, "hand": h, "target": t})
+            actions.append(
+                {"kind": "play", "player": pi, "hand": h, "target": t, "card": state["players"][pi]["hand"][h]["id"]}
+            )
         else:
-            res = wb.call("wb.endturn")
-            actions.append({"kind": "end"})
+            res = wb.call("wb.endturn", {"player": pi})
+            actions.append({"kind": "end", "player": pi})
         state = res["state"]
         if not state["inProgress"]:
             break
@@ -125,18 +134,28 @@ def restore_probe(wb, wb_state, rng, length, label):
     }
 
 
-def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng, played, case_played, restore=None):
+def run_case(
+    dev, wb, character, seed, encounter, cards, max_steps, verbose, rng, played, case_played, restore=None, players=1
+):
     t0 = time.time()
     detour_rng = random.Random(1)
-    dev.call("run.new", {"character": character, "seed": seed, "ascension": 0})
-    wb.call("wb.run", {"character": character, "seed": seed, "ascension": 0})
+    dev.call("run.new", {"character": character, "players": players, "seed": seed, "ascension": 0})
+    wb.call("wb.run", {"character": character, "players": players, "seed": seed, "ascension": 0})
     if cards:
         dev.call("deck.set", {"cards": cards})
         wb.call("deck.set", {"cards": cards})
     run = dev.call("run.state")
     dev_state = dev.call("combat.enter", {"encounter": encounter})["state"]
     wb_start = wb.call(
-        "wb.start", {"character": character, "seed": seed, "encounter": encounter, "rng": run["rng"], "heal": True}
+        "wb.start",
+        {
+            "character": character,
+            "players": players,
+            "seed": seed,
+            "encounter": encounter,
+            "rng": run["rng"],
+            "heal": True,
+        },
     )
     wb_state = wb_start["state"]
     mismatches = []
@@ -160,23 +179,30 @@ def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng
         action = pick_action(dev_state, rng)
         if action is None:
             break
-        kind, arg = action
+        pi, kind, arg = action
         if kind == "play":
             h, t = arg
-            card_info = dev_state["players"][0]["hand"][h]
+            card_info = dev_state["players"][pi]["hand"][h]
             card = card_info["id"]
             played[card] += 1
             case_played[card] += 1
-            dev_res = dev.call("combat.play", {"hand": h, "target": t})
-            wb_res = wb.call("wb.play", {"hand": h, "target": t})
-            label = f"play {step} {card} hand={h} target={t}"
-            act = {"kind": "play", "hand": h, "target": t, "card": card, "upgrade": card_info.get("upgrade", 0)}
+            dev_res = dev.call("combat.play", {"player": pi, "hand": h, "target": t})
+            wb_res = wb.call("wb.play", {"player": pi, "hand": h, "target": t})
+            label = f"play {step} P{pi + 1} {card} hand={h} target={t}"
+            act = {
+                "kind": "play",
+                "player": pi,
+                "hand": h,
+                "target": t,
+                "card": card,
+                "upgrade": card_info.get("upgrade", 0),
+            }
             micros = {"dev": dev_res.get("playMicros"), "wb": wb_res.get("playMicros")}
         else:
-            dev_res = dev.call("combat.endturn")
-            wb_res = wb.call("wb.endturn")
+            dev_res = dev.call("combat.endturn", {"player": pi})
+            wb_res = wb.call("wb.endturn", {"player": pi})
             label = f"endturn {step}"
-            act = {"kind": "end"}
+            act = {"kind": "end", "player": pi}
             micros = {"dev": dev_res.get("endTurnMicros"), "wb": wb_res.get("endTurnMicros")}
         dev_state = dev_res["state"]
         wb_state = wb_res["state"]
@@ -210,6 +236,7 @@ def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--character", default="IRONCLAD")
+    ap.add_argument("--players", type=int, default=1)
     ap.add_argument("--seed", default="AI4STS2")
     ap.add_argument("--encounter", action="append", default=[])
     ap.add_argument("--cards", default="")
@@ -241,7 +268,19 @@ def main():
             case_played = collections.Counter()
             try:
                 steps, mismatches, trace = run_case(
-                    dev, wb, a.character, seed, enc, cards, a.steps, a.v, rng, played, case_played, restore
+                    dev,
+                    wb,
+                    a.character,
+                    seed,
+                    enc,
+                    cards,
+                    a.steps,
+                    a.v,
+                    rng,
+                    played,
+                    case_played,
+                    restore,
+                    a.players,
                 )
             except HarnessError as e:
                 print(f"{enc} seed={seed}: error {str(e)[:200]}")
@@ -291,6 +330,7 @@ def main():
         "diff",
         {
             "character": a.character,
+            "players": a.players,
             "encounters": a.encounter or ["NIBBITS_WEAK"],
             "seeds": a.seed.split(","),
             "deck": cards,

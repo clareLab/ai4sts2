@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
@@ -51,7 +52,7 @@ public static class HarnessOps
             "combat.enter" => EnterCombatAsync(host, request.Args),
             "combat.state" => Result(CombatDump.Capture()),
             "combat.play" => PlayAsync(host, request.Args),
-            "combat.endturn" => EndTurnAsync(host),
+            "combat.endturn" => EndTurnAsync(host, request.Args),
             "wb.run" => Result(WorkbenchRun(request.Args)),
             "wb.start" => Result(WorkbenchStart(request.Args)),
             "wb.play" => Result(WorkbenchPlay(request.Args)),
@@ -134,24 +135,45 @@ public static class HarnessOps
     private static async Task<JsonElement?> NewRunAsync(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var character = a.GetProperty("character").GetString()!.ToUpperInvariant();
+        var characters = Characters(a);
         var seed = a.TryGetProperty("seed", out var s) ? s.GetString()! : "AI4STS2";
         var ascension = a.TryGetProperty("ascension", out var asc) ? asc.GetInt32() : 0;
-        var model = ModelDb.GetById<CharacterModel>(new ModelId(ModelId.SlugifyCategory<CharacterModel>(), character));
+        var models = characters
+            .Select(c => ModelDb.GetById<CharacterModel>(new ModelId(ModelId.SlugifyCategory<CharacterModel>(), c)))
+            .ToList();
         var game = NGame.Instance ?? throw new InvalidOperationException("NGame missing");
         if (RunManager.Instance.IsInProgress)
         {
             await game.ReturnToMainMenu();
         }
-        var run = await game.StartNewSingleplayerRun(
-            model,
-            false,
-            ModelDb.Acts.ToList(),
-            [],
-            seed,
-            GameMode.Standard,
-            ascension
-        );
+        RunState run;
+        if (models.Count == 1)
+        {
+            run = await game.StartNewSingleplayerRun(
+                models[0],
+                false,
+                ModelDb.Acts.ToList(),
+                [],
+                seed,
+                GameMode.Standard,
+                ascension
+            );
+        }
+        else
+        {
+            TestFlags.ShouldSendResumeForRemotePlayers = true;
+            var unlocks = SaveManager.Instance.GenerateUnlockStateFromProgress();
+            run = RunState.CreateForNewRun(
+                models.Select((m, i) => Player.CreateForNewRun(m, unlocks, 1UL + (ulong)i)).ToList(),
+                ModelDb.Acts.Select(act => act.ToMutable()).ToList(),
+                [],
+                GameMode.Standard,
+                ascension,
+                seed
+            );
+            RunManager.Instance.SetUpNewSingleplayer(run, false);
+            await game.StartRun(run);
+        }
         _oracleSelector?.Dispose();
         _oracleSelector = CardSelectCmd.PushSelector(new ScriptSelector());
         return Json(
@@ -181,7 +203,7 @@ public static class HarnessOps
     {
         var a = args ?? throw new ArgumentException("args required");
         var state = CombatManager.Instance.DebugOnlyGetState() ?? throw new InvalidOperationException("no combat");
-        var player = LocalContext.GetMe(state) ?? throw new InvalidOperationException("no local player");
+        var player = OraclePlayer(state, a);
         var hand = player.PlayerCombatState!.Hand.Cards;
         var index = a.GetProperty("hand").GetInt32();
         var card = hand[index];
@@ -212,10 +234,17 @@ public static class HarnessOps
         );
     }
 
-    private static async Task<JsonElement?> EndTurnAsync(HarnessHost host)
+    private static Player OraclePlayer(CombatState state, JsonElement a)
+    {
+        return a.TryGetProperty("player", out var p) && p.ValueKind == JsonValueKind.Number
+            ? state.Players[p.GetInt32()]
+            : LocalContext.GetMe(state) ?? throw new InvalidOperationException("no local player");
+    }
+
+    private static async Task<JsonElement?> EndTurnAsync(HarnessHost host, JsonElement? args)
     {
         var state = CombatManager.Instance.DebugOnlyGetState() ?? throw new InvalidOperationException("no combat");
-        var player = LocalContext.GetMe(state) ?? throw new InvalidOperationException("no local player");
+        var player = args is { } a ? OraclePlayer(state, a) : LocalContext.GetMe(state)!;
         var turn = player.PlayerCombatState!.TurnNumber;
         var sw = Stopwatch.StartNew();
         PlayerCmd.EndTurn(player, false);
