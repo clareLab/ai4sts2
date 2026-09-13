@@ -26,6 +26,7 @@ public static class PowerWeights
             "SLOTH" => (40, 3),
             "STEAM_ERUPTION" => (10, 90),
             "SANDPIT" => (0, 0),
+            "THE_GAMBIT" => (-400, 1),
             _ => enemy ? (0, 0) : (5, 10),
         };
     }

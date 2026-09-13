@@ -10,6 +10,9 @@ public sealed class PowerWeightsTests
     [InlineData("VULNERABLE_POWER", true, 20, 6)]
     [InlineData("PLOW_POWER", true, 0, 0)]
     [InlineData("RINGING_POWER", false, 25, 1)]
+    [InlineData("THE_GAMBIT_POWER", false, -400, 1)]
+    [InlineData("DISINTEGRATION_POWER", false, 75, 30)]
+    [InlineData("STEAM_ERUPTION_POWER", true, 10, 90)]
     public void KnownPowersCarrySuffixInsensitiveWeights(string id, bool enemy, int weight, int cap) =>
         Assert.Equal((weight, cap), PowerWeights.For(id, enemy));
 
