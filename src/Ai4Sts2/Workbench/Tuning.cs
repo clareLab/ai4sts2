@@ -43,6 +43,8 @@ public static class Tuning
 
     public static int TerminalWin { get; set; } = 1_000_000;
 
+    public static bool RateDamage { get; set; }
+
     public static bool FreezeMap { get; set; } = true;
 
     public static bool StableShuffle { get; set; } = true;

@@ -30,6 +30,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private readonly bool _probe;
     private readonly double _damagePerTurn;
     private readonly double _blockPerTurn;
+    private readonly Dictionary<uint, double> _damageWeight = [];
+    private readonly Dictionary<uint, double> _killValue = [];
     private readonly double _attacksPerTurn;
     private readonly double _skillsPerTurn;
     private readonly double _horizon;
@@ -74,7 +76,24 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         _skillsPerTurn = fight.Turns > 0 ? Math.Max(0.5, (double)fight.Skills / fight.Turns) : 1.5;
         var bulk = state.Enemies.Where(e => e.IsAlive && e.MaxHp < 1_000_000).Sum(e => e.CurrentHp + e.Block);
         _horizon = Math.Clamp(bulk / _damagePerTurn, 1, Tuning.RateHorizon);
+        if (Tuning.RateDamage && state.Players.Count > 0)
+        {
+            foreach (var enemy in state.Enemies)
+            {
+                if (enemy.CombatId is not { } id || !enemy.IsAlive || enemy.Monster?.NextMove is null)
+                {
+                    continue;
+                }
+                var threat = ThreatOf(enemy, state, state.Players[0]);
+                _damageWeight[id] = Math.Clamp(HpWeight * threat.PerTurn / _damagePerTurn, 4, 25);
+                _killValue[id] = Math.Clamp(threat.PerTurn * _horizon * HpWeight, 100, 1_500);
+            }
+        }
     }
+
+    private double DamageWeight(uint id) => Tuning.RateDamage && _damageWeight.TryGetValue(id, out var w) ? w : 10;
+
+    private double KillValue(uint id) => Tuning.RateDamage && _killValue.TryGetValue(id, out var v) ? v : 500;
 
     private double Race(CombatState state)
     {
@@ -607,10 +626,10 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         {
             if (present.TryGetValue(id, out var enemy) && enemy.MaxHp <= maxHp)
             {
-                score += (maxHp - enemy.CurrentHp) * 10;
+                score += (maxHp - enemy.CurrentHp) * DamageWeight(id);
                 if (!enemy.IsAlive)
                 {
-                    score += 500;
+                    score += KillValue(id);
                 }
                 score -= enemy.Block;
                 score += PowerScore(enemy, -1, state);
@@ -621,7 +640,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             }
             else
             {
-                score += (maxHp * 10) + 500 + (enemy is null ? 0 : 1_000);
+                score += (maxHp * DamageWeight(id)) + KillValue(id) + (enemy is null ? 0 : 1_000);
             }
         }
         var weakest = int.MaxValue;
