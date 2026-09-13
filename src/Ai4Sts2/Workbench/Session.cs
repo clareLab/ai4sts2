@@ -31,12 +31,18 @@ public sealed class FightStats
 
     public int HpLost { get; set; }
 
+    public int Attacks { get; set; }
+
+    public int Skills { get; set; }
+
     public void Reset()
     {
         Turns = 0;
         Dealt = 0;
         Block = 0;
         HpLost = 0;
+        Attacks = 0;
+        Skills = 0;
     }
 }
 

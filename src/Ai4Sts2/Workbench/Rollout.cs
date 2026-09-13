@@ -305,6 +305,28 @@ public static class Rollout
                 if (action.Kind == "play" && action.Card is { } played)
                 {
                     session.CardPlays[played] = session.CardPlays.GetValueOrDefault(played) + 1;
+                    var hand = live.Players[action.Player].PlayerCombatState?.Hand.Cards;
+                    switch (hand is not null && action.Hand < hand.Count ? hand[action.Hand].Type : CardType.Curse)
+                    {
+                        case CardType.Attack:
+                            session.Fight.Attacks++;
+                            break;
+                        case CardType.Skill:
+                            session.Fight.Skills++;
+                            break;
+                        case CardType.None:
+                            break;
+                        case CardType.Power:
+                            break;
+                        case CardType.Status:
+                            break;
+                        case CardType.Curse:
+                            break;
+                        case CardType.Quest:
+                            break;
+                        default:
+                            break;
+                    }
                 }
                 if (action.Kind == "end")
                 {
@@ -418,7 +440,8 @@ public static class Rollout
             var remaining = state.Enemies.Where(e => e.IsAlive).Sum(e => e.CurrentHp);
             elite = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
             var alive = run.Players.Any(p => p.Creature.IsAlive);
-            score += ((eliteMax - remaining) * 3) - ((before - after) * 8) + (won ? 2000 : 0) - (alive ? 0 : 4000);
+            score += ((eliteMax - remaining) * 3) - ((before - after) * 8) + (won ? 2000 : 0);
+            score -= alive ? 0 : 1500 + (2500.0 * remaining / Math.Max(1, eliteMax));
             if (!alive)
             {
                 return new RolloutSummary(fights, wins, lost, score, details, elite, null, 0);
@@ -440,7 +463,8 @@ public static class Rollout
             bossDamage = bossMax - remaining;
             boss = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
             var alive = run.Players.Any(p => p.Creature.IsAlive);
-            score += (bossDamage * 3) + (after * 6) - (hpAfterFights * 6) + (won ? 3000 : 0) - (alive ? 0 : 4000);
+            score += (bossDamage * 3) + (after * 6) - (hpAfterFights * 6) + (won ? 3000 : 0);
+            score -= alive ? 0 : 1500 + (2500.0 * remaining / Math.Max(1, bossMax));
         }
         return new RolloutSummary(fights, wins, lost, score, details, elite, boss, bossDamage);
     }

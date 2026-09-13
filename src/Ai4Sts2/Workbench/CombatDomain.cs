@@ -30,6 +30,11 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private readonly bool _probe;
     private readonly double _damagePerTurn;
     private readonly double _blockPerTurn;
+    private readonly double _attacksPerTurn;
+    private readonly double _skillsPerTurn;
+    private double _horizon;
+    private double _incomingPerTurn;
+    private int _enemyBulk;
     private bool _atTurnStart;
 
     private sealed record Threat(int[] Damage, double PerTurn, double HitsPerTurn, int MaxHit, int Moves);
@@ -65,6 +70,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         var fight = Session.Fight;
         _damagePerTurn = fight.Turns > 0 ? Math.Max(prior * 0.5, (double)fight.Dealt / fight.Turns) : prior;
         _blockPerTurn = fight.Turns > 0 ? (double)fight.Block / fight.Turns : Tuning.BlockPrior;
+        _attacksPerTurn = fight.Turns > 0 ? Math.Max(1, (double)fight.Attacks / fight.Turns) : 2.5;
+        _skillsPerTurn = fight.Turns > 0 ? Math.Max(0.5, (double)fight.Skills / fight.Turns) : 1.5;
     }
 
     private double Race(CombatState state)
@@ -578,6 +585,10 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             return -1_000_000 + (turn * 2_000) + (Dealt(state) * 10);
         }
         double score = 0;
+        if (Tuning.RatePricing)
+        {
+            Tempo(state);
+        }
         var present = new Dictionary<uint, Creature>();
         foreach (var enemy in state.Enemies)
         {
@@ -596,7 +607,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     score += 500;
                 }
                 score -= enemy.Block;
-                score += PowerScore(enemy, -1);
+                score += PowerScore(enemy, -1, state);
                 if (Tuning.Doom)
                 {
                     score += Doom(enemy);
@@ -637,7 +648,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 score -= 100_000;
                 continue;
             }
-            score += PowerScore(creature, 1);
+            score += PowerScore(creature, 1, state);
             score += player.Potions.Sum(q => q.Id.Entry == "BLOCK_POTION" ? _blockPotionValue : _potionValue);
             if (player.PlayerCombatState is { } pcs)
             {
@@ -878,7 +889,56 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return sb.ToString();
     }
 
-    private static double PowerScore(Creature creature, int sign)
+    private void Tempo(CombatState state)
+    {
+        _enemyBulk = 0;
+        _incomingPerTurn = 0;
+        var seat = state.Players.Count > 0 ? state.Players[Math.Min(ActivePlayer ?? 0, state.Players.Count - 1)] : null;
+        foreach (var enemy in state.Enemies)
+        {
+            if (!enemy.IsAlive || enemy.Monster is null || enemy.MaxHp >= 1_000_000)
+            {
+                continue;
+            }
+            _enemyBulk += enemy.CurrentHp + enemy.Block;
+            if (seat is not null && enemy.Monster.NextMove is not null)
+            {
+                var threat = ThreatOf(enemy, state, seat);
+                _incomingPerTurn += threat.PerTurn;
+            }
+        }
+        _horizon = Math.Clamp(_enemyBulk / _damagePerTurn, 1, Tuning.RateHorizon);
+    }
+
+    private double? RatePrice(Creature creature, PowerModel power, int amount, int sign, CombatState state)
+    {
+        var turns = Math.Min(Math.Abs(amount), _horizon);
+        if (sign < 0 && creature.Monster is not null && state.Players.Count > 0 && _enemyBulk > 0)
+        {
+            var seat = state.Players[Math.Min(ActivePlayer ?? 0, state.Players.Count - 1)];
+            var threat = ThreatOf(creature, state, seat);
+            var hits = threat.HitsPerTurn;
+            var share = (double)(creature.CurrentHp + creature.Block) / _enemyBulk;
+            return power switch
+            {
+                StrengthPower => amount * hits * _horizon * HpWeight,
+                VulnerablePower => -0.5 * _damagePerTurn * turns * 10 * share,
+                WeakPower => -0.25 * threat.PerTurn * turns * HpWeight,
+                _ => null,
+            };
+        }
+        return power switch
+        {
+            StrengthPower => amount * _attacksPerTurn * _horizon * 10,
+            DexterityPower => amount * _skillsPerTurn * _horizon * HpWeight,
+            VulnerablePower => -0.5 * _incomingPerTurn * turns * HpWeight,
+            WeakPower => -0.25 * _damagePerTurn * turns * 10,
+            FrailPower => -0.25 * _blockPerTurn * turns * HpWeight,
+            _ => null,
+        };
+    }
+
+    private double PowerScore(Creature creature, int sign, CombatState state)
     {
         double score = 0;
         var temporaryStrength = 0;
@@ -916,6 +976,11 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             };
             if (amount == 0)
             {
+                continue;
+            }
+            if (Tuning.RatePricing && RatePrice(creature, power, amount, sign, state) is { } priced)
+            {
+                score += sign * priced;
                 continue;
             }
             var polarity = weight < 0 || power.GetTypeForAmount(amount) != PowerType.Debuff ? 1 : -1;

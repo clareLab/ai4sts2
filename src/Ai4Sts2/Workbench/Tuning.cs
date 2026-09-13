@@ -33,6 +33,10 @@ public static class Tuning
 
     public static bool EliteProbe { get; set; }
 
+    public static bool RatePricing { get; set; }
+
+    public static int RateHorizon { get; set; } = 6;
+
     public static bool FreezeMap { get; set; } = true;
 
     public static bool Spotlight { get; set; } = true;
