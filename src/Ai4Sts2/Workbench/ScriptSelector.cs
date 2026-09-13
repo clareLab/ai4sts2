@@ -27,8 +27,17 @@ public sealed class ScriptSelector : ICardSelector
         return Task.FromResult(result);
     }
 
+    public (int? Card, string? Alternative)? CardReward { get; set; }
+
     public CardRewardSelection GetSelectedCardReward(
         IReadOnlyList<CardCreationResult> options,
         IReadOnlyList<CardRewardAlternative> alternatives
-    ) => throw new NotSupportedException("card rewards are outside combat");
+    )
+    {
+        var (card, alternative) = CardReward ?? throw new InvalidOperationException("no card reward choice scripted");
+        return card is { } index ? new CardRewardSelection { card = options[index].Card }
+            : alternative is { } id
+                ? new CardRewardSelection { alternative = alternatives.First(a => a.OptionId == id) }
+            : default;
+    }
 }

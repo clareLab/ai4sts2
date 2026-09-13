@@ -65,6 +65,14 @@ public static class HarnessOps
             "wb.snapbench" => Result(WorkbenchSnapBench(request.Args)),
             "wb.restore" => Result(WorkbenchRestore(request.Args)),
             "wb.search" => Result(WorkbenchSearch(request.Args)),
+            "wb.view" => Result(WorkbenchView()),
+            "wb.travel" => Result(WorkbenchTravel(request.Args)),
+            "wb.rewards" => Result(WorkbenchRewards()),
+            "wb.take" => Result(WorkbenchTake(request.Args)),
+            "wb.skip" => Result(WorkbenchSkip()),
+            "wb.rest" => Result(WorkbenchRest(request.Args)),
+            "wb.evalreward" => Result(WorkbenchEvalReward(request.Args)),
+            "wb.autoplay" => Result(WorkbenchAutoplay(request.Args)),
             _ => throw new NotSupportedException($"unknown op '{request.Op}'"),
         };
 
@@ -282,8 +290,101 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         var seed = a.TryGetProperty("seed", out var s) ? s.GetString()! : "AI4STS2";
         var ascension = a.TryGetProperty("ascension", out var asc) ? asc.GetInt32() : 0;
-        return RunSetup.Capture(Session.Instance.NewRun(Characters(a), seed, ascension));
+        var map = a.TryGetProperty("map", out var m) && m.GetBoolean();
+        return RunSetup.Capture(Session.Instance.NewRun(Characters(a), seed, ascension, map));
     }
+
+    private static object WorkbenchView() => Flow(Session.Instance.Flow.View());
+
+    private static object WorkbenchTravel(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var sw = Stopwatch.StartNew();
+        Session.Instance.Flow.Travel(a.GetProperty("col").GetInt32(), a.GetProperty("row").GetInt32());
+        return Flow(Session.Instance.Flow.View(), sw.Elapsed.TotalMicroseconds);
+    }
+
+    private static object WorkbenchRewards()
+    {
+        _ = Session.Instance.Flow.OfferRewards();
+        return Flow(Session.Instance.Flow.View());
+    }
+
+    private static object WorkbenchTake(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        int? card = a.TryGetProperty("card", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : null;
+        var alternative = a.TryGetProperty("alternative", out var alt) ? alt.GetString() : null;
+        var ok = Session.Instance.Flow.TakeReward(a.GetProperty("index").GetInt32(), card, alternative);
+        return Flow(Session.Instance.Flow.View(), null, ok);
+    }
+
+    private static object WorkbenchSkip()
+    {
+        Session.Instance.Flow.SkipRewards();
+        return Flow(Session.Instance.Flow.View());
+    }
+
+    private static object WorkbenchRest(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var ok = Session.Instance.Flow.Rest(a.GetProperty("option").GetString()!);
+        return Flow(Session.Instance.Flow.View(), null, ok);
+    }
+
+    private static SearchOptions SearchOptionsFrom(JsonElement a, int defaultNodes = 2000)
+    {
+        var maxNodes = a.TryGetProperty("maxNodes", out var n) ? n.GetInt32() : defaultNodes;
+        var maxDepth = a.TryGetProperty("maxDepth", out var d) ? d.GetInt32() : 8;
+        var leaf = a.TryGetProperty("leaf", out var l) ? l.GetString() ?? "estimate" : "estimate";
+        var beam = a.TryGetProperty("beam", out var b) ? b.GetInt32() : 3;
+        var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
+        return new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns);
+    }
+
+    private static object WorkbenchEvalReward(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var fights = a.TryGetProperty("fights", out var f) ? f.GetInt32() : 3;
+        var maxTurns = a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
+        var evaluation = Rollout.EvaluateCardReward(
+            Session.Instance,
+            a.GetProperty("index").GetInt32(),
+            SearchOptionsFrom(a),
+            fights,
+            maxTurns
+        );
+        return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchAutoplay(JsonElement? args)
+    {
+        var a = args ?? new JsonElement();
+        var maxTurns =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
+        var options =
+            a.ValueKind == JsonValueKind.Object ? SearchOptionsFrom(a) : new SearchOptions(2000, 8, true, 3, 1);
+        var (won, turns, nodes, micros) = Rollout.PlayCombat(Session.Instance, options, maxTurns);
+        return new
+        {
+            Won = won,
+            Turns = turns,
+            Nodes = nodes,
+            Micros = micros,
+            State = CombatDump.Capture(),
+            View = Session.Instance.Flow.View(),
+        };
+    }
+
+    private static object Flow(RunView view, double? micros = null, bool? ok = null) =>
+        new
+        {
+            View = view,
+            Run = RunSetup.Capture(Session.Instance.Run!),
+            State = CombatManager.Instance.IsInProgress ? CombatDump.Capture() : null,
+            Micros = micros,
+            Ok = ok,
+        };
 
     private static List<string> Characters(JsonElement a)
     {

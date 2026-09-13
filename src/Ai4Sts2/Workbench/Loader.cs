@@ -40,6 +40,7 @@ public static class Loader
         var turnState = manager._turnState;
         if (turnState is null || !turnState.IsInProgress)
         {
+            manager._turnLoopTask = null;
             return;
         }
         using (turnState.ReadyLock.EnterScope())

@@ -32,11 +32,20 @@ public sealed class Session
 
     public Pump Pump { get; } = new();
 
+    public RunFlow Flow { get; }
+
+    public bool RealMap { get; private set; }
+
     public static Session Instance { get; } = new();
+
+    public Session()
+    {
+        Flow = new RunFlow(this);
+    }
 
     public RunState NewRun(string character, string seed, int ascension) => NewRun([character], seed, ascension);
 
-    public RunState NewRun(IReadOnlyList<string> characters, string seed, int ascension)
+    public RunState NewRun(IReadOnlyList<string> characters, string seed, int ascension, bool realMap = false)
     {
         if (Run is not null)
         {
@@ -47,17 +56,18 @@ public sealed class Session
             _selectorScope?.Dispose();
             _selectorScope = null;
         }
-        return EnsureRun(characters, seed, ascension);
+        return EnsureRun(characters, seed, ascension, realMap);
     }
 
     public RunState EnsureRun(string character, string seed, int ascension) => EnsureRun([character], seed, ascension);
 
-    public RunState EnsureRun(IReadOnlyList<string> characters, string seed, int ascension)
+    public RunState EnsureRun(IReadOnlyList<string> characters, string seed, int ascension, bool realMap = false)
     {
         if (Run is not null)
         {
             return Run;
         }
+        RealMap = realMap;
         LocalContext.NetId = LocalNetId;
         if (!Switches.Applied)
         {
@@ -86,10 +96,17 @@ public sealed class Session
             ascension,
             seed
         );
-        state.Map = new MockSinglePointActMap();
+        if (!realMap)
+        {
+            state.Map = new MockSinglePointActMap();
+        }
         RunManager.Instance.SetUpTest(state, new NetSingleplayerGameService());
         Run = state;
         _selectorScope = CardSelectCmd.PushSelector(Selector);
+        if (realMap)
+        {
+            Flow.Begin();
+        }
         return state;
     }
 
@@ -108,13 +125,14 @@ public sealed class Session
             .GetById<EncounterModel>(new ModelId(ModelId.SlugifyCategory<EncounterModel>(), encounterId))
             .ToMutable();
         ExitRooms(run);
-        if (_appendedHistory && run._mapPointHistory.Count > 0 && run._mapPointHistory[^1].Count > 0)
+        if (!RealMap && _appendedHistory && run._mapPointHistory.Count > 0 && run._mapPointHistory[^1].Count > 0)
         {
             run._mapPointHistory[^1].RemoveAt(run._mapPointHistory[^1].Count - 1);
         }
         run.AppendToMapPointHistory(MapPointType.Monster, encounter.RoomType, encounter.Id);
         _appendedHistory = true;
         var room = new CombatRoom(encounter, run);
+        CombatManager.Instance._turnLoopTask = null;
         run.PushRoom(room);
         Pump.Drive(() => Hook.BeforeRoomEntered(run, room), "BeforeRoomEntered");
         Pump.Drive(() => room.Enter(run, false), "enter room");
@@ -220,7 +238,7 @@ public sealed class Session
         }
     }
 
-    private void RequirePlayable(int afterTurn, string label)
+    public void RequirePlayable(int afterTurn, string label)
     {
         if (!CombatManager.Instance.IsInProgress)
         {
