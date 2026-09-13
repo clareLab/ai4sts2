@@ -158,6 +158,23 @@ public sealed class RunFlow(Session session)
         return ok;
     }
 
+    public bool TakeRewardUnsynchronized(int index, int? card, string? alternative)
+    {
+        var (set, _) = Current();
+        var reward = set.Rewards[index];
+        session.Selector.CardReward = (card, alternative);
+        var ok = false;
+        using (Session.ActAs(set.Player))
+        {
+            session.Pump.Drive(
+                async () => ok = await reward.SelectUnsynchronized(),
+                $"take reward {index} unsynchronized"
+            );
+        }
+        session.Selector.CardReward = null;
+        return ok;
+    }
+
     public void SkipRewards()
     {
         var (set, _) = Current();

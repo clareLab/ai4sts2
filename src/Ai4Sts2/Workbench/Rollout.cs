@@ -112,7 +112,7 @@ public static class Rollout
             {
                 if (card is not null)
                 {
-                    _ = session.Flow.TakeReward(rewardIndex, card, alternative);
+                    _ = session.Flow.TakeRewardUnsynchronized(rewardIndex, card, alternative);
                 }
                 var summary = Fights(session, options, fights, maxTurns);
                 results.Add(new RewardOptionResult(label, card, alternative, summary));
