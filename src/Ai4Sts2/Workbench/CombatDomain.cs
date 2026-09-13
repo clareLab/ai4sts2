@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Entities.Rngs;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace Ai4Sts2.Workbench;
@@ -16,11 +17,13 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
 {
     private const int HpWeight = 15;
     private readonly Dictionary<uint, int> _rootEnemyMaxHp = [];
+    private readonly int _potionValue;
 
     public CombatDomain(Session session)
     {
         Session = session;
         var (state, _) = Session.Current(0);
+        _potionValue = state.Encounter?.RoomType is RoomType.Elite or RoomType.Boss ? 40 : 260;
         foreach (var enemy in state.Enemies)
         {
             if (enemy.CombatId is { } id)
@@ -71,6 +74,29 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     list.Add(new SearchAction("play", p, h, null, card.Id.Entry));
                 }
             }
+            var potions = new HashSet<string>();
+            for (var slot = 0; slot < player.PotionSlots.Count; slot++)
+            {
+                var potion = Session.UsablePotion(player, slot);
+                if (potion is null || !potions.Add(potion.Id.Entry))
+                {
+                    continue;
+                }
+                if (potion.TargetType is TargetType.AnyEnemy)
+                {
+                    foreach (var (e, i) in enemies)
+                    {
+                        if (potion.IsValidTarget(e))
+                        {
+                            list.Add(new SearchAction("potion", p, slot, i, potion.Id.Entry));
+                        }
+                    }
+                }
+                else if (potion.IsValidTarget(Session.PotionTarget(potion, state, null)))
+                {
+                    list.Add(new SearchAction("potion", p, slot, null, potion.Id.Entry));
+                }
+            }
             if (separateEnds)
             {
                 list.Add(new SearchAction("end", p, -1, null, null));
@@ -102,7 +128,12 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     }
 
     public TimeSpan Apply(SearchAction action) =>
-        action.Kind == "end" ? Session.EndTurn(action.Player) : Session.Play(action.Player, action.Hand, action.Target);
+        action.Kind switch
+        {
+            "end" => Session.EndTurn(action.Player),
+            "potion" => Session.UsePotion(action.Player, action.Hand, action.Target),
+            _ => Session.Play(action.Player, action.Hand, action.Target),
+        };
 
     public double Evaluate()
     {
@@ -156,6 +187,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 continue;
             }
             score += PowerScore(creature, 1);
+            score += player.Potions.Count() * _potionValue;
             if (player.PlayerCombatState is { } pcs)
             {
                 score += pcs.Pets.Sum(pet => pet.CurrentHp * 3);
@@ -243,6 +275,11 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             foreach (var orb in pcs.OrbQueue.Orbs)
             {
                 sb.Append(orb.Id.Entry).Append(',');
+            }
+            sb.Append('|');
+            foreach (var potion in player.PotionSlots)
+            {
+                sb.Append(potion?.Id.Entry).Append(',');
             }
         }
         sb.Append('|');

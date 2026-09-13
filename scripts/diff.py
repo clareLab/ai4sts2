@@ -80,10 +80,16 @@ def pick_action(state, rng):
         return None
     alive = [i for i, e in enumerate(state["enemies"]) if e["alive"]]
     options = []
+    potions = []
     for pi, p in enumerate(state["players"]):
         if p["phase"] != "Play" or not p["creature"]["alive"]:
             continue
         options += [(pi, h) for h in range(len(p["hand"])) if p["playable"][h]]
+        potions += [(pi, s) for s in range(len(p["potions"])) if (p.get("potionUsable") or [])[s : s + 1] == [True]]
+    if potions and rng is not None and rng.random() < 0.25:
+        pi, s = rng.choice(potions)
+        target = rng.choice(alive) if alive else None
+        return (pi, "potion", (s, target))
     if not options or (rng is not None and rng.random() < 0.15):
         return (0, "end", None)
     pi, h = options[0] if rng is None else rng.choice(options)
@@ -105,6 +111,12 @@ def detour(wb, state, rng, length):
             res = wb.call("wb.play", {"player": pi, "hand": h, "target": t})
             actions.append(
                 {"kind": "play", "player": pi, "hand": h, "target": t, "card": state["players"][pi]["hand"][h]["id"]}
+            )
+        elif kind == "potion":
+            s, t = arg
+            res = wb.call("wb.potion", {"player": pi, "slot": s, "target": t})
+            actions.append(
+                {"kind": "potion", "player": pi, "hand": s, "target": t, "card": state["players"][pi]["potions"][s]}
             )
         else:
             res = wb.call("wb.endturn", {"player": pi})
@@ -135,7 +147,20 @@ def restore_probe(wb, wb_state, rng, length, label):
 
 
 def run_case(
-    dev, wb, character, seed, encounter, cards, max_steps, verbose, rng, played, case_played, restore=None, players=1
+    dev,
+    wb,
+    character,
+    seed,
+    encounter,
+    cards,
+    max_steps,
+    verbose,
+    rng,
+    played,
+    case_played,
+    restore=None,
+    players=1,
+    potions=None,
 ):
     t0 = time.time()
     detour_rng = random.Random(1)
@@ -144,6 +169,9 @@ def run_case(
     if cards:
         dev.call("deck.set", {"cards": cards})
         wb.call("deck.set", {"cards": cards})
+    if potions:
+        dev.call("potions.set", {"potions": potions})
+        wb.call("potions.set", {"potions": potions})
     run = dev.call("run.state")
     dev_state = dev.call("combat.enter", {"encounter": encounter})["state"]
     wb_start = wb.call(
@@ -198,6 +226,16 @@ def run_case(
                 "upgrade": card_info.get("upgrade", 0),
             }
             micros = {"dev": dev_res.get("playMicros"), "wb": wb_res.get("playMicros")}
+        elif kind == "potion":
+            s, t = arg
+            card = dev_state["players"][pi]["potions"][s]
+            played[card] += 1
+            case_played[card] += 1
+            dev_res = dev.call("combat.potion", {"player": pi, "slot": s, "target": t})
+            wb_res = wb.call("wb.potion", {"player": pi, "slot": s, "target": t})
+            label = f"potion {step} P{pi + 1} {card} slot={s} target={t}"
+            act = {"kind": "potion", "player": pi, "hand": s, "target": t, "card": card}
+            micros = {"dev": dev_res.get("potionMicros"), "wb": wb_res.get("potionMicros")}
         else:
             dev_res = dev.call("combat.endturn", {"player": pi})
             wb_res = wb.call("wb.endturn", {"player": pi})
@@ -240,6 +278,7 @@ def main():
     ap.add_argument("--seed", default="AI4STS2")
     ap.add_argument("--encounter", action="append", default=[])
     ap.add_argument("--cards", default="")
+    ap.add_argument("--potions", default="")
     ap.add_argument("--steps", type=int, default=60)
     ap.add_argument("-v", action="store_true")
     ap.add_argument("--random", type=int, default=None)
@@ -261,6 +300,7 @@ def main():
     ping = wb.call("ping")
     dev_ping = dev.call("ping")
     cards = [c.strip().upper() for c in a.cards.split(",") if c.strip()]
+    potions = [c.strip().upper() for c in a.potions.split(",") if c.strip()]
     total = 0
     failed = 0
     for enc in a.encounter or ["NIBBITS_WEAK"]:
@@ -281,6 +321,7 @@ def main():
                     case_played,
                     restore,
                     a.players,
+                    potions,
                 )
             except HarnessError as e:
                 print(f"{enc} seed={seed}: error {str(e)[:200]}")
@@ -331,6 +372,7 @@ def main():
         {
             "character": a.character,
             "players": a.players,
+            "potions": potions,
             "encounters": a.encounter or ["NIBBITS_WEAK"],
             "seeds": a.seed.split(","),
             "deck": cards,

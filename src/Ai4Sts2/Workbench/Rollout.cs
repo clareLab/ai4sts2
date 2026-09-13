@@ -48,10 +48,12 @@ public static class Rollout
                 {
                     break;
                 }
-                _ =
-                    action.Kind == "end"
-                        ? session.EndTurn(action.Player)
-                        : session.Play(action.Player, action.Hand, action.Target);
+                _ = action.Kind switch
+                {
+                    "end" => session.EndTurn(action.Player),
+                    "potion" => session.UsePotion(action.Player, action.Hand, action.Target),
+                    _ => session.Play(action.Player, action.Hand, action.Target),
+                };
             }
             turns++;
         }

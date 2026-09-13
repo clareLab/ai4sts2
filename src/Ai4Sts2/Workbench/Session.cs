@@ -3,7 +3,9 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Map;
@@ -173,6 +175,46 @@ public sealed class Session
             },
             $"play {card.Id.Entry}"
         );
+        _ = Pump.Drive(CombatManager.Instance.CheckWinCondition, "win check");
+        return sw.Elapsed;
+    }
+
+    public static PotionModel? UsablePotion(Player player, int slot)
+    {
+        var potion = player.GetPotionAtSlotIndex(slot);
+        if (potion is null || potion.IsQueued || potion.HasBeenRemovedFromState)
+        {
+            return null;
+        }
+        var usable =
+            potion.Usage is PotionUsage.AnyTime or PotionUsage.CombatOnly
+            && player.CanUseOrRemovePotions
+            && potion.PassesCustomUsabilityCheck;
+        return usable ? potion : null;
+    }
+
+    public static Creature? PotionTarget(PotionModel potion, CombatState state, int? enemyIndex)
+    {
+        return !potion.TargetType.IsSingleTarget() ? null
+            : potion.TargetType == TargetType.AnyEnemy
+                ? enemyIndex is { } i && i < state.Enemies.Count ? state.Enemies[i]
+                    : null
+            : potion.Owner.Creature;
+    }
+
+    public TimeSpan UsePotion(int playerIndex, int slot, int? enemyIndex)
+    {
+        var (state, player) = Current(playerIndex);
+        using var scope = ActAs(player);
+        var potion =
+            UsablePotion(player, slot) ?? throw new InvalidOperationException($"potion slot {slot} not usable");
+        var target = PotionTarget(potion, state, enemyIndex);
+        if (!potion.IsValidTarget(target))
+        {
+            throw new InvalidOperationException($"invalid target for {potion.Id.Entry}");
+        }
+        var sw = Stopwatch.StartNew();
+        Pump.Drive(() => potion.OnUseWrapper(new BlockingPlayerChoiceContext(), target), $"potion {potion.Id.Entry}");
         _ = Pump.Drive(CombatManager.Instance.CheckWinCondition, "win check");
         return sw.Elapsed;
     }

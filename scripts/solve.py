@@ -18,6 +18,12 @@ def play_line(wb, line):
                 {"player": action.get("player", 0), "hand": action["hand"], "target": action.get("target")},
             )
             micros = res.get("playMicros")
+        elif action["kind"] == "potion":
+            res = wb.call(
+                "wb.potion",
+                {"player": action.get("player", 0), "slot": action["hand"], "target": action.get("target")},
+            )
+            micros = res.get("potionMicros")
         else:
             res = wb.call("wb.endturn", {"player": action.get("player", 0)})
             micros = res.get("endTurnMicros")
@@ -28,10 +34,12 @@ def play_line(wb, line):
     return steps, state
 
 
-def verify_on_oracle(dev, character, players, seed, encounter, cards, rng_start, steps):
+def verify_on_oracle(dev, character, players, seed, encounter, cards, potions, rng_start, steps):
     dev.call("run.new", {"character": character, "players": players, "seed": seed, "ascension": 0})
     if cards:
         dev.call("deck.set", {"cards": cards})
+    if potions:
+        dev.call("potions.set", {"potions": potions})
     dev.call("run.rng.set", {"rng": rng_start})
     dev_state = dev.call("combat.enter", {"encounter": encounter})["state"]
     mismatches = 0
@@ -40,6 +48,11 @@ def verify_on_oracle(dev, character, players, seed, encounter, cards, rng_start,
         if a["kind"] == "play":
             res = dev.call("combat.play", {"player": a.get("player", 0), "hand": a["hand"], "target": a.get("target")})
             entry["micros"]["dev"] = res.get("playMicros")
+        elif a["kind"] == "potion":
+            res = dev.call(
+                "combat.potion", {"player": a.get("player", 0), "slot": a["hand"], "target": a.get("target")}
+            )
+            entry["micros"]["dev"] = res.get("potionMicros")
         else:
             res = dev.call("combat.endturn", {"player": a.get("player", 0)})
             entry["micros"]["dev"] = res.get("endTurnMicros")
@@ -56,11 +69,13 @@ def verify_on_oracle(dev, character, players, seed, encounter, cards, rng_start,
     return mismatches
 
 
-def solve_case(wb, dev, a, seed, encounter, cards):
+def solve_case(wb, dev, a, seed, encounter, cards, potions):
     t0 = time.time()
     wb.call("wb.run", {"character": a.character, "players": a.players, "seed": seed, "ascension": 0})
     if cards:
         wb.call("deck.set", {"cards": cards})
+    if potions:
+        wb.call("potions.set", {"potions": potions})
     rng_start = wb.call("run.state")["rng"]
     start = wb.call(
         "wb.start",
@@ -120,7 +135,9 @@ def solve_case(wb, dev, a, seed, encounter, cards):
         turns += 1
     mismatches = None
     if dev is not None:
-        mismatches = verify_on_oracle(dev, a.character, a.players, seed, encounter, cards, rng_start, trace["steps"])
+        mismatches = verify_on_oracle(
+            dev, a.character, a.players, seed, encounter, cards, potions, rng_start, trace["steps"]
+        )
         if mismatches:
             cut = next(i for i, s in enumerate(trace["steps"]) if s["diffs"])
             trace["steps"] = trace["steps"][: cut + 1]
@@ -144,7 +161,7 @@ def solve_case(wb, dev, a, seed, encounter, cards):
         "wallSeconds": round(time.time() - t0, 3),
     }
     for s in trace["steps"]:
-        if s["action"]["kind"] == "play":
+        if s["action"]["kind"] in ("play", "potion"):
             summary["played"][s["action"]["card"]] = summary["played"].get(s["action"]["card"], 0) + 1
     trace["wallSeconds"] = summary["wallSeconds"]
     return summary, {**summary, **trace}
@@ -157,6 +174,7 @@ def main():
     ap.add_argument("--seed", default="AI4STS2")
     ap.add_argument("--encounter", action="append", default=[])
     ap.add_argument("--cards", default="")
+    ap.add_argument("--potions", default="")
     ap.add_argument("--max-nodes", type=int, default=2000)
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=40)
@@ -169,6 +187,7 @@ def main():
     encounters = [e.upper() for e in a.encounter] or ["NIBBITS_WEAK"]
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
     cards = [c.strip().upper() for c in a.cards.split(",") if c.strip()]
+    potions = [c.strip().upper() for c in a.potions.split(",") if c.strip()]
     wb = Harness("wb", timeout=900)
     dev = None if a.no_verify else Harness("dev", timeout=600)
     if dev is not None:
@@ -180,7 +199,7 @@ def main():
     for enc in encounters:
         for seed in seeds:
             try:
-                summary, trace = solve_case(wb, dev, a, seed, enc, cards)
+                summary, trace = solve_case(wb, dev, a, seed, enc, cards, potions)
             except HarnessError as e:
                 summary = {
                     "encounter": enc,
@@ -215,6 +234,7 @@ def main():
             "encounters": encounters,
             "seeds": seeds,
             "deck": cards,
+            "potions": potions,
             "maxNodes": a.max_nodes,
             "maxDepth": a.max_depth,
             "leaf": a.leaf,

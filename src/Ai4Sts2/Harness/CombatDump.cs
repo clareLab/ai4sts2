@@ -1,5 +1,6 @@
 using Ai4Sts2.Core;
 using Ai4Sts2.Game;
+using Ai4Sts2.Workbench;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
@@ -40,6 +41,7 @@ public sealed record PlayerDump(
     IReadOnlyList<CardDump> Exhaust,
     IReadOnlyList<CardDump> Play,
     IReadOnlyList<string?> Potions,
+    IReadOnlyList<bool> PotionUsable,
     IReadOnlyList<string> Relics,
     IReadOnlyList<string> Orbs
 );
@@ -98,6 +100,7 @@ public static class CombatDump
             DumpPile(pcs.ExhaustPile),
             DumpPile(pcs.PlayPile),
             player.PotionSlots.Select(p => p?.Id.Entry).ToList(),
+            player.PotionSlots.Select((_, i) => Session.UsablePotion(player, i) is not null).ToList(),
             player.Relics.Select(r => r.Id.Entry).ToList(),
             pcs.OrbQueue.Orbs.Select(o => o.Id.Entry).ToList()
         );

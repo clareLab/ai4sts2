@@ -49,14 +49,17 @@ public static class HarnessOps
             "run.state" => Result(RunSetup.Capture(RunManager.Instance.State!)),
             "run.rng.set" => Result(SetRunRng(request.Args)),
             "deck.set" => SetDeckAsync(request.Args),
+            "potions.set" => SetPotionsAsync(request.Args),
             "combat.enter" => EnterCombatAsync(host, request.Args),
             "combat.state" => Result(CombatDump.Capture()),
             "combat.play" => PlayAsync(host, request.Args),
             "combat.endturn" => EndTurnAsync(host, request.Args),
+            "combat.potion" => PotionAsync(host, request.Args),
             "wb.run" => Result(WorkbenchRun(request.Args)),
             "wb.start" => Result(WorkbenchStart(request.Args)),
             "wb.play" => Result(WorkbenchPlay(request.Args)),
             "wb.endturn" => Result(WorkbenchEndTurn(request.Args)),
+            "wb.potion" => Result(WorkbenchPotion(request.Args)),
             "wb.state" => Result(CombatDump.Capture()),
             "wb.bench" => Result(WorkbenchBench(request.Args)),
             "wb.warmup" => WorkbenchWarmupAsync(host, request.Args),
@@ -182,6 +185,7 @@ public static class HarnessOps
             RunManager.Instance.SetUpNewSingleplayer(run, false);
             await game.StartRun(run);
         }
+        SaveManager.Instance.SetFtuesEnabled(false);
         _oracleSelector?.Dispose();
         _oracleSelector = CardSelectCmd.PushSelector(new ScriptSelector());
         return Json(
@@ -242,6 +246,34 @@ public static class HarnessOps
         );
     }
 
+    private static async Task<JsonElement?> PotionAsync(HarnessHost host, JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var state = CombatManager.Instance.DebugOnlyGetState() ?? throw new InvalidOperationException("no combat");
+        var player = OraclePlayer(state, a);
+        var slot = a.GetProperty("slot").GetInt32();
+        var potion =
+            Session.UsablePotion(player, slot) ?? throw new InvalidOperationException($"potion slot {slot} not usable");
+        int? index = a.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : null;
+        var target = Session.PotionTarget(potion, state, index);
+        if (!potion.IsValidTarget(target))
+        {
+            throw new InvalidOperationException($"invalid target for {potion.Id.Entry}");
+        }
+        var sw = Stopwatch.StartNew();
+        potion.EnqueueManualUse(target);
+        await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
+        await WaitForPlayerTurnAsync(host);
+        return Json(
+            new
+            {
+                Potion = potion.Id.Entry,
+                PotionMicros = sw.Elapsed.TotalMicroseconds,
+                State = CombatDump.Capture(),
+            }
+        );
+    }
+
     private static Player OraclePlayer(CombatState state, JsonElement a)
     {
         return a.TryGetProperty("player", out var p) && p.ValueKind == JsonValueKind.Number
@@ -274,6 +306,29 @@ public static class HarnessOps
             );
         }
         return RunSetup.Capture(run);
+    }
+
+    private static async Task<JsonElement?> SetPotionsAsync(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var run = RunManager.Instance.State ?? throw new InvalidOperationException("no run");
+        var player = a.TryGetProperty("player", out var p) ? run.Players[p.GetInt32()] : LocalContext.GetMe(run)!;
+        foreach (var potion in player.Potions.ToList())
+        {
+            potion.Discard();
+        }
+        var ids = a.GetProperty("potions").EnumerateArray().Select(c => c.GetString()!.ToUpperInvariant()).ToList();
+        var results = new List<string>();
+        foreach (var id in ids)
+        {
+            var model = ModelDb
+                .GetById<PotionModel>(new ModelId(ModelId.SlugifyCategory<PotionModel>(), id))
+                .ToMutable();
+            var result = player.AddPotionInternal(model, -1);
+            results.Add(result.success ? id : $"{id}:{result.failureReason}");
+        }
+        await Task.CompletedTask;
+        return Json(new { Potions = results, Run = RunSetup.Capture(run) });
     }
 
     private static async Task<JsonElement?> SetDeckAsync(JsonElement? args)
@@ -428,6 +483,16 @@ public static class HarnessOps
         var player = a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
         var elapsed = Session.Instance.Play(player, a.GetProperty("hand").GetInt32(), target);
         return new { PlayMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
+    }
+
+    private static object WorkbenchPotion(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        int? target =
+            a.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : null;
+        var player = a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
+        var elapsed = Session.Instance.UsePotion(player, a.GetProperty("slot").GetInt32(), target);
+        return new { PotionMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
     }
 
     private static object WorkbenchEndTurn(JsonElement? args)
