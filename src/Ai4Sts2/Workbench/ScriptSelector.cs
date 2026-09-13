@@ -34,7 +34,12 @@ public sealed class ScriptSelector : ICardSelector
         IReadOnlyList<CardRewardAlternative> alternatives
     )
     {
-        var (card, alternative) = CardReward ?? throw new InvalidOperationException("no card reward choice scripted");
+        if (CardReward is null)
+        {
+            Entry.Log.Warn($"unscripted card reward skipped: {string.Join(",", options.Select(o => o.Card.Id.Entry))}");
+            return default;
+        }
+        var (card, alternative) = CardReward.Value;
         return card is { } index ? new CardRewardSelection { card = options[index].Card }
             : alternative is { } id
                 ? new CardRewardSelection { alternative = alternatives.First(a => a.OptionId == id) }
