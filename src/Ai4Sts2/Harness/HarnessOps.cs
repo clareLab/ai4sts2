@@ -734,6 +734,9 @@ public static class HarnessOps
         int? target =
             a.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : null;
         var player = a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
+        int? choice =
+            a.TryGetProperty("choice", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : null;
+        Session.Instance.Selector.BeginAction(choice);
         var elapsed = Session.Instance.Play(player, a.GetProperty("hand").GetInt32(), target);
         return new { PlayMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
     }

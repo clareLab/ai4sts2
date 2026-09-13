@@ -264,18 +264,14 @@ public static class Rollout
                     )
                 );
             }
+            var replay = new CombatDomain(session);
             foreach (var action in line)
             {
                 if (!CombatManager.Instance.IsInProgress)
                 {
                     break;
                 }
-                _ = action.Kind switch
-                {
-                    "end" => session.EndTurn(action.Player),
-                    "potion" => session.UsePotion(action.Player, action.Hand, action.Target),
-                    _ => session.Play(action.Player, action.Hand, action.Target),
-                };
+                _ = replay.Apply(action);
             }
             turns++;
         }
