@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using MegaCrit.Sts2.Core.Models;
 
 namespace Ai4Sts2.Workbench;
 
@@ -39,21 +40,9 @@ public sealed class Snapshot
                 {
                     continue;
                 }
-                if (element.IsValueType)
+                foreach (var item in array)
                 {
-                    var copier = Copier.For(element);
-                    var buffer = new object?[copier.Fields.Length];
-                    foreach (var item in array)
-                    {
-                        Walk(item, copier, buffer, seen, stack);
-                    }
-                }
-                else
-                {
-                    foreach (var item in array)
-                    {
-                        Consider(item, seen, stack);
-                    }
+                    Consider(item, seen, stack);
                 }
                 continue;
             }
@@ -106,21 +95,53 @@ public sealed class Snapshot
         }
     }
 
+    private enum Shape
+    {
+        Leaf,
+        Struct,
+        Model,
+        Reference,
+    }
+
+    private static readonly Dictionary<Type, (Shape Shape, Copier? Copier, object?[]? Buffer)> _shapes = [];
+
+    private static (Shape Shape, Copier? Copier, object?[]? Buffer) ShapeOf(Type t)
+    {
+        if (_shapes.TryGetValue(t, out var shape))
+        {
+            return shape;
+        }
+        if (t.IsPrimitive || t.IsEnum || t == typeof(string) || typeof(Delegate).IsAssignableFrom(t) || Skip(t))
+        {
+            shape = (Shape.Leaf, null, null);
+        }
+        else if (t.IsValueType)
+        {
+            var copier = Copier.For(t);
+            shape = (Shape.Struct, copier, new object?[copier.Fields.Length]);
+        }
+        else
+        {
+            shape = (typeof(AbstractModel).IsAssignableFrom(t) ? Shape.Model : Shape.Reference, null, null);
+        }
+        _shapes[t] = shape;
+        return shape;
+    }
+
     private static void Consider(object? value, HashSet<object> seen, Stack<object> stack)
     {
         if (value is null)
         {
             return;
         }
-        var t = value.GetType();
-        if (t.IsPrimitive || t.IsEnum || value is string || value is Delegate || Skip(t))
+        var (shape, copier, buffer) = ShapeOf(value.GetType());
+        if (shape == Shape.Leaf || (shape == Shape.Model && ((AbstractModel)value).IsCanonical))
         {
             return;
         }
-        if (t.IsValueType)
+        if (shape == Shape.Struct)
         {
-            var copier = Copier.For(t);
-            Walk(value, copier, new object?[copier.Fields.Length], seen, stack);
+            Walk(value, copier!, buffer!, seen, stack);
             return;
         }
         if (seen.Add(value))
