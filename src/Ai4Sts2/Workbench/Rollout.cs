@@ -334,14 +334,41 @@ public static class Rollout
     )
     {
         var sw = Stopwatch.StartNew();
+        var rollouts = Tournament(session, choices.Select(c => c.Apply).ToList(), options, plan, out var finalists);
+        var results = choices.Select((c, i) => new ChoiceResult(c.Label, c.Index, rollouts[i])).ToList();
+        var best = finalists.Count > 0 ? results[finalists.MaxBy(i => rollouts[i].Score)].Label : "";
+        return new ChoiceEvaluation(kind, results, best, sw.Elapsed.TotalMicroseconds);
+    }
+
+    private static List<RolloutSummary> Tournament(
+        Session session,
+        List<Action> applies,
+        SearchOptions options,
+        RolloutPlan plan,
+        out List<int> finalists
+    )
+    {
         var root = Loader.Take();
-        var results = new List<ChoiceResult>();
+        var results = new RolloutSummary[applies.Count];
+        finalists = Enumerable.Range(0, applies.Count).ToList();
         try
         {
-            foreach (var (label, index, apply) in choices)
+            if (applies.Count > Tuning.HalvingAbove && Tuning.HalvingAbove > 0)
             {
-                apply();
-                results.Add(new ChoiceResult(label, index, Fights(session, options, plan)));
+                var screen = plan with { Fights = 1, Boss = false };
+                foreach (var i in finalists)
+                {
+                    applies[i]();
+                    results[i] = Fights(session, options, screen);
+                    _ = Loader.Restore(root, session.Pump);
+                }
+                var keep = Math.Max(3, (applies.Count + 1) / 2);
+                finalists = finalists.OrderByDescending(i => results[i].Score).Take(keep).ToList();
+            }
+            foreach (var i in finalists)
+            {
+                applies[i]();
+                results[i] = Fights(session, options, plan);
                 _ = Loader.Restore(root, session.Pump);
             }
         }
@@ -350,8 +377,7 @@ public static class Rollout
             _ = Loader.Restore(root, session.Pump);
             root.Release();
         }
-        var best = results.Count > 0 ? results.OrderByDescending(r => r.Rollout.Score).First().Label : "";
-        return new ChoiceEvaluation(kind, results, best, sw.Elapsed.TotalMicroseconds);
+        return results.ToList();
     }
 
     public static PathEvaluation EvaluateEvent(Session session, SearchOptions options, int maxTurns)
@@ -586,27 +612,20 @@ public static class Rollout
             choices.Add((reward.Cards[i], i, null));
         }
         choices.Add(("Skip", null, null));
-        var root = Loader.Take();
-        var results = new List<RewardOptionResult>();
-        try
-        {
-            foreach (var (label, card, alternative) in choices)
+        var applies = choices
+            .Select(c => new Action(() =>
             {
-                if (card is not null)
+                if (c.Card is not null)
                 {
-                    _ = session.Flow.TakeRewardUnsynchronized(rewardIndex, card, alternative, player);
+                    _ = session.Flow.TakeRewardUnsynchronized(rewardIndex, c.Card, c.Alternative, player);
                 }
-                var summary = Fights(session, options, plan);
-                results.Add(new RewardOptionResult(label, card, alternative, summary));
-                _ = Loader.Restore(root, session.Pump);
-            }
-        }
-        finally
-        {
-            _ = Loader.Restore(root, session.Pump);
-            root.Release();
-        }
-        var best = results.OrderByDescending(r => r.Rollout.Score).First().Label;
+            }))
+            .ToList();
+        var rollouts = Tournament(session, applies, options, plan, out var finalists);
+        var results = choices
+            .Select((c, i) => new RewardOptionResult(c.Label, c.Card, c.Alternative, rollouts[i]))
+            .ToList();
+        var best = results[finalists.MaxBy(i => rollouts[i].Score)].Label;
         return new RewardEvaluation(rewardIndex, results, best, sw.Elapsed.TotalMicroseconds);
     }
 }

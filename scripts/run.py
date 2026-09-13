@@ -223,10 +223,10 @@ def plan_args(a):
     return {
         "fights": a.fights,
         "maxTurns": a.max_turns,
-        "maxNodes": a.max_nodes,
+        "maxNodes": a.rollout_nodes,
         "maxDepth": a.max_depth,
         "leaf": "estimate",
-        "beam": a.beam,
+        "beam": a.rollout_beam,
         "boss": a.boss,
         "bossTurns": a.boss_turns,
         "diversify": not a.no_diversify,
@@ -503,6 +503,8 @@ def main():
     ap.add_argument("--boss", action="store_true")
     ap.add_argument("--boss-turns", type=int, default=6)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--rollout-nodes", type=int, default=400)
+    ap.add_argument("--rollout-beam", type=int, default=3)
     a = ap.parse_args()
     party = a.players > 1
     defaults = {
