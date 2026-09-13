@@ -89,7 +89,8 @@ public sealed class Snapshot
     private static void Walk(object boxed, Copier copier, object?[] buffer, HashSet<object> seen, Stack<object> stack)
     {
         copier.Capture(boxed, buffer);
-        foreach (var value in buffer)
+        var values = copier.Opaque ? (object?[])buffer.Clone() : buffer;
+        foreach (var value in values)
         {
             Consider(value, seen, stack);
         }

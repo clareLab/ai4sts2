@@ -3,7 +3,7 @@ import sys
 import time
 
 from diff import diff, norm_state
-from harness import Harness
+from harness import Harness, HarnessError
 
 import metrics
 
@@ -105,9 +105,13 @@ def solve_case(wb, dev, a, seed, encounter, cards):
             s["diffs"] = []
         trace["steps"].extend(steps)
         turns += 1
-    mismatches = 0
+    mismatches = None
     if dev is not None:
         mismatches = verify_on_oracle(dev, a.character, seed, encounter, cards, rng_start, trace["steps"])
+        if mismatches:
+            cut = next(i for i, s in enumerate(trace["steps"]) if s["diffs"])
+            trace["steps"] = trace["steps"][: cut + 1]
+            state = trace["steps"][-1]["state"]
     me = state["players"][0] if state["players"] else None
     summary = {
         "encounter": encounter,
@@ -119,6 +123,7 @@ def solve_case(wb, dev, a, seed, encounter, cards):
         else ("running" if state["inProgress"] else ("lost" if me and not me["creature"]["alive"] else "won")),
         "hpLeft": me["creature"]["hp"] if me else None,
         "mismatches": mismatches,
+        "verified": dev is not None,
         "played": {},
         "searches": len(trace["searches"]),
         "nodes": sum(s["nodes"] for s in trace["searches"]),
@@ -157,7 +162,28 @@ def main():
     traces = []
     for enc in encounters:
         for seed in seeds:
-            summary, trace = solve_case(wb, dev, a, seed, enc, cards)
+            try:
+                summary, trace = solve_case(wb, dev, a, seed, enc, cards)
+            except HarnessError as e:
+                summary = {
+                    "encounter": enc,
+                    "seed": seed,
+                    "steps": 0,
+                    "outcome": "error",
+                    "error": str(e)[:500],
+                    "mismatches": None,
+                    "verified": dev is not None,
+                    "played": {},
+                    "searches": 0,
+                    "nodes": 0,
+                    "searchMillis": 0,
+                    "wallSeconds": 0,
+                }
+                trace = {**summary, "initial": None, "steps": [], "restores": [], "searches": []}
+                print(f"{enc} seed={seed}: error {str(e)[:200]}")
+                cases.append(summary)
+                traces.append(trace)
+                continue
             cases.append(summary)
             traces.append(trace)
             print(
@@ -177,7 +203,8 @@ def main():
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
             "steps": sum(c["steps"] for c in cases),
-            "mismatches": sum(c["mismatches"] for c in cases),
+            "mismatches": sum(c["mismatches"] or 0 for c in cases) if dev is not None else None,
+            "errors": sum(c["outcome"] == "error" for c in cases),
             "won": won,
             "lost": sum(c["outcome"] == "lost" for c in cases),
             "nodes": sum(c["nodes"] for c in cases),
@@ -188,8 +215,10 @@ def main():
         {"cases": traces},
         {"game": ping.get("game"), "mod": ping.get("mod")},
     )
-    print(f"won {won}/{len(cases)} mismatches={sum(c['mismatches'] for c in cases)}")
-    return 1 if any(c["mismatches"] for c in cases) else 0
+    print(
+        f"won {won}/{len(cases)} mismatches={sum(c['mismatches'] or 0 for c in cases)} errors={sum(c['outcome'] == 'error' for c in cases)}"
+    )
+    return 1 if any(c["mismatches"] or c["outcome"] == "error" for c in cases) else 0
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ import random
 import sys
 import time
 
-from harness import Harness
+from harness import Harness, HarnessError
 
 import metrics
 
@@ -127,6 +127,7 @@ def restore_probe(wb, wb_state, rng, length, label):
 
 def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng, played, case_played, restore=None):
     t0 = time.time()
+    detour_rng = random.Random(1)
     dev.call("run.new", {"character": character, "seed": seed, "ascension": 0})
     wb.call("wb.run", {"character": character, "seed": seed, "ascension": 0})
     if cards:
@@ -192,8 +193,8 @@ def run_case(dev, wb, character, seed, encounter, cards, max_steps, verbose, rng
         trace["steps"].append(entry)
         if not dev_state["inProgress"]:
             break
-        if restore and rng is not None and (step + 1) % restore[0] == 0 and wb_state["players"][0]["phase"] == "Play":
-            probe = restore_probe(wb, wb_state, rng, restore[1], f"step {step + 1}")
+        if restore and (step + 1) % restore[0] == 0 and wb_state["players"][0]["phase"] == "Play":
+            probe = restore_probe(wb, wb_state, rng or detour_rng, restore[1], f"step {step + 1}")
             trace["restores"].append(probe)
             if probe["diffs"]:
                 mismatches.append(
@@ -238,9 +239,26 @@ def main():
     for enc in a.encounter or ["NIBBITS_WEAK"]:
         for seed in a.seed.split(","):
             case_played = collections.Counter()
-            steps, mismatches, trace = run_case(
-                dev, wb, a.character, seed, enc, cards, a.steps, a.v, rng, played, case_played, restore
-            )
+            try:
+                steps, mismatches, trace = run_case(
+                    dev, wb, a.character, seed, enc, cards, a.steps, a.v, rng, played, case_played, restore
+                )
+            except HarnessError as e:
+                print(f"{enc} seed={seed}: error {str(e)[:200]}")
+                cases.append(
+                    {
+                        "encounter": enc,
+                        "seed": seed,
+                        "steps": 0,
+                        "mismatches": 0,
+                        "played": {},
+                        "outcome": "error",
+                        "error": str(e)[:500],
+                    }
+                )
+                traces.append({**cases[-1], "initial": None, "initialDiffs": [], "steps": [], "restores": []})
+                failed += 1
+                continue
             total += len(steps)
             failed += len(mismatches)
             final = trace["steps"][-1]["state"] if trace["steps"] else trace["initial"]

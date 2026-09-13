@@ -1,9 +1,13 @@
 using System.Diagnostics;
+using System.Text;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Powers;
+using MegaCrit.Sts2.Core.Entities.Rngs;
+using MegaCrit.Sts2.Core.Models;
 
 namespace Ai4Sts2.Workbench;
 
@@ -28,6 +32,7 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
 {
     private readonly Dictionary<string, double> _table = [];
     private readonly Stopwatch _clock = new();
+    private readonly Dictionary<uint, int> _rootEnemyMaxHp = [];
     private int _nodes;
     private int _leaves;
     private int _transpositions;
@@ -40,6 +45,15 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
     public SearchResult Run()
     {
         _clock.Restart();
+        _rootEnemyMaxHp.Clear();
+        var (root, _) = Current();
+        foreach (var enemy in root.Enemies)
+        {
+            if (enemy.CombatId is { } id)
+            {
+                _rootEnemyMaxHp[id] = enemy.MaxHp;
+            }
+        }
         var line = new List<SearchAction>();
         var score = Explore(0, line, out var best);
         return new SearchResult(
@@ -133,6 +147,30 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
         _actMicros += elapsed.TotalMicroseconds;
     }
 
+    private static string CardSignature(CardModel card)
+    {
+        var sb = new StringBuilder();
+        sb.Append(card.Id.Entry)
+            .Append('/')
+            .Append(card.CurrentUpgradeLevel)
+            .Append('/')
+            .Append(card.EnergyCost.GetResolved());
+        sb.Append('/').Append(card.EnergyCost.CostsX ? 'x' : '-');
+        foreach (var (name, v) in card.DynamicVars)
+        {
+            sb.Append('/').Append(name).Append('=').Append(v.BaseValue);
+        }
+        if (card.Enchantment is { } enchantment)
+        {
+            sb.Append("/e:").Append(enchantment.Id.Entry);
+        }
+        if (card.Affliction is { } affliction)
+        {
+            sb.Append("/a:").Append(affliction.Id.Entry);
+        }
+        return sb.ToString();
+    }
+
     private static List<SearchAction> Enumerate(CombatState state, Player player)
     {
         var pcs = player.PlayerCombatState!;
@@ -146,8 +184,7 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
             {
                 continue;
             }
-            var sig = $"{card.Id.Entry}/{card.CurrentUpgradeLevel}/{card.EnergyCost.GetResolved()}";
-            if (!seen.Add(sig))
+            if (!seen.Add(CardSignature(card)))
             {
                 continue;
             }
@@ -169,7 +206,7 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
         return list;
     }
 
-    private static double Evaluate()
+    private double Evaluate()
     {
         var manager = CombatManager.Instance;
         var state = manager.DebugOnlyGetState() ?? throw new InvalidOperationException("no combat");
@@ -180,18 +217,45 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
             return me.Creature.IsAlive ? 1_000_000 + (hp * 100) : -1_000_000;
         }
         double score = 0;
+        var present = new Dictionary<uint, Creature>();
         foreach (var enemy in state.Enemies)
         {
-            score += (enemy.MaxHp - enemy.CurrentHp) * 10;
-            if (!enemy.IsAlive)
+            if (enemy.CombatId is { } id)
             {
-                score += 500;
+                present[id] = enemy;
             }
-            score -= enemy.Block;
-            score += PowerScore(enemy, -1);
+        }
+        foreach (var (id, maxHp) in _rootEnemyMaxHp)
+        {
+            if (present.TryGetValue(id, out var enemy))
+            {
+                score += (maxHp - enemy.CurrentHp) * 10;
+                if (!enemy.IsAlive)
+                {
+                    score += 500;
+                }
+                score -= enemy.Block;
+                score += PowerScore(enemy, -1);
+            }
+            else
+            {
+                score += (maxHp * 10) + 500;
+            }
+        }
+        foreach (var enemy in state.Enemies)
+        {
+            if (enemy.CombatId is { } id && !_rootEnemyMaxHp.ContainsKey(id))
+            {
+                score -= enemy.CurrentHp * 10;
+            }
         }
         score -= (me.Creature.MaxHp - hp) * 15;
         score += PowerScore(me.Creature, 1);
+        foreach (var pet in me.PlayerCombatState!.Pets)
+        {
+            score += pet.CurrentHp * 3;
+        }
+        score += me.PlayerCombatState.OrbQueue.Orbs.Count * 8;
         return score;
     }
 
@@ -203,12 +267,13 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
             var weight = power.Id.Entry switch
             {
                 "STRENGTH" or "DEXTERITY" => 30,
-                "VULNERABLE" or "WEAK" => -20,
-                "FRAIL" => -15,
-                "POISON" => -8,
+                "VULNERABLE" or "WEAK" => 20,
+                "FRAIL" => 15,
+                "POISON" => 8,
                 _ => 5,
             };
-            score += sign * power.Amount * weight;
+            var polarity = power.TypeForCurrentAmount == PowerType.Debuff ? -1 : 1;
+            score += sign * polarity * power.Amount * weight;
         }
         return score;
     }
@@ -216,22 +281,50 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
     private static string Key(CombatState state, Player player)
     {
         var pcs = player.PlayerCombatState!;
-        var hand = string.Join(
-            ",",
-            pcs.Hand.Cards.Select(c => c.Id.Entry + c.CurrentUpgradeLevel + ":" + c.EnergyCost.GetResolved()).Order()
-        );
-        var draw = pcs.DrawPile.Cards.Count;
-        var discard = string.Join(",", pcs.DiscardPile.Cards.Select(c => c.Id.Entry).Order());
-        var exhaust = pcs.ExhaustPile.Cards.Count;
-        var enemies = string.Join(
-            ";",
-            state.Enemies.Select(e => $"{e.CurrentHp}/{e.Block}/{Powers(e)}/{e.Monster?.NextMove?.StateId}")
-        );
-        return $"{pcs.TurnNumber}|{pcs.Energy}|{pcs.Stars}|{player.Creature.CurrentHp}/{player.Creature.Block}/{Powers(player.Creature)}|{hand}|{draw}|{discard}|{exhaust}|{enemies}|{string.Join(",", state.RunState.Rng.GetRng(MegaCrit.Sts2.Core.Entities.Rngs.RunRngType.Shuffle)._counter)}";
+        var sb = new StringBuilder(512);
+        sb.Append(pcs.TurnNumber).Append('|').Append(pcs.Energy).Append('|').Append(pcs.Stars).Append('|');
+        foreach (var creature in state.Creatures)
+        {
+            sb.Append(creature.CombatId)
+                .Append(':')
+                .Append(creature.CurrentHp)
+                .Append('/')
+                .Append(creature.Block)
+                .Append('/');
+            Powers(sb, creature);
+            sb.Append('/').Append(creature.Monster?.NextMove?.StateId).Append(';');
+        }
+        sb.Append('|');
+        Pile(sb, pcs.Hand, true);
+        Pile(sb, pcs.DrawPile, false);
+        Pile(sb, pcs.DiscardPile, false);
+        Pile(sb, pcs.ExhaustPile, false);
+        Pile(sb, pcs.PlayPile, false);
+        foreach (var orb in pcs.OrbQueue.Orbs)
+        {
+            sb.Append(orb.Id.Entry).Append(',');
+        }
+        sb.Append('|');
+        foreach (var type in Enum.GetValues<RunRngType>())
+        {
+            sb.Append(state.RunState.Rng.GetRng(type)._counter).Append(',');
+        }
+        return sb.ToString();
     }
 
-    private static string Powers(Creature c) =>
-        string.Join(",", c.Powers.Select(p => p.Id.Entry + "=" + p.Amount).Order());
+    private static void Pile(StringBuilder sb, CardPile pile, bool sorted)
+    {
+        var cards = pile.Cards.Select(CardSignature);
+        sb.Append(string.Join(",", sorted ? cards.Order() : cards)).Append('|');
+    }
+
+    private static void Powers(StringBuilder sb, Creature c)
+    {
+        foreach (var power in c.Powers.OrderBy(p => p.Id.Entry, StringComparer.Ordinal))
+        {
+            sb.Append(power.Id.Entry).Append('=').Append(power.Amount).Append(',');
+        }
+    }
 
     private static (CombatState State, Player Player) Current()
     {

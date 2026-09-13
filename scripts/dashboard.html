@@ -356,7 +356,7 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
     const modelsRow = scoped.filter((r) => r.kind === "models").slice(-1)[0] || rows.filter((r) => r.kind === "models").slice(-1)[0] || null;
     const benches = inWindow(scoped.filter((r) => r.kind === "bench" && r.result && r.result.plays && r.result.plays.count), f);
     const warmups = inWindow(scoped.filter((r) => r.kind === "warmup"), f);
-    const diffs = inWindow(scoped.filter((r) => r.kind === "diff" || r.kind === "solve"), f);
+    const diffs = inWindow(scoped.filter((r) => r.kind === "diff" || (r.kind === "solve" && r.verified)), f);
     const solves = inWindow(scoped.filter((r) => r.kind === "solve"), f);
     const perAction = (b) => { const r = b.result; const n = (r.plays.count || 0) + ((r.endTurns || {}).count || 0) + ((r.starts || {}).count || 0); return n ? r.allocatedBytes / n : null; };
     const cards = {}; const encounters = {}; let steps = 0, mism = 0; const seeds = new Set();
@@ -491,7 +491,7 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
   const okIcon = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const badIcon = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
   const state = (fail, n) => `<span class="state ${fail ? "fail" : n ? "pass" : "muted"}">${fail ? badIcon + "不一致" : n ? okIcon + "一致" : "未验证"}</span>`;
-  const outcomeText = { won: "胜利", lost: "阵亡", running: "未打完", mismatch: "不一致" };
+  const outcomeText = { won: "胜利", lost: "阵亡", running: "未打完", mismatch: "不一致", error: "出错" };
 
   function coverage(id, title, items, stats, f, kind, tipf, tableCols, hint) {
     if (!items.length) return `<figure><header><h2>${title}</h2></header><div class="empty">${hint}</div></figure>`;

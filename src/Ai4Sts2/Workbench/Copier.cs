@@ -18,6 +18,8 @@ public sealed class Copier
 
     public Action<object, object?[]>? Restore { get; }
 
+    public bool Opaque { get; }
+
     private Copier(Type type)
     {
         Type = type;
@@ -30,6 +32,7 @@ public sealed class Copier
             );
         }
         Fields = list.ToArray();
+        Opaque = Fields.Any(f => f.FieldType == typeof(object) || f.FieldType.IsInterface);
         Capture = EmitCapture(type, Fields);
         Restore = type.IsValueType ? null : EmitRestore(type, Fields);
     }

@@ -18,6 +18,10 @@ public sealed class ScriptSelector : ICardSelector
         var cards = options as IReadOnlyList<CardModel> ?? options.ToList();
         var count = Math.Min(minSelect > 0 ? minSelect : Math.Min(1, maxSelect), cards.Count);
         var chosen = _script.Count > 0 ? _script.Dequeue() : Enumerable.Range(0, count).ToArray();
+        if (Log.Count >= 200)
+        {
+            Log.RemoveAt(0);
+        }
         Log.Add((cards.Select(c => c.Id.Entry).ToList(), minSelect, maxSelect, chosen));
         IEnumerable<CardModel> result = chosen.Select(i => cards[i]).ToList();
         return Task.FromResult(result);
