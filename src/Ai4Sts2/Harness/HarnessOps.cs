@@ -77,6 +77,7 @@ public static class HarnessOps
             "wb.view" => Result(WorkbenchView(request.Args)),
             "wb.map" => Result(Session.Instance.Flow.MapSnapshot()),
             "wb.tune" => Result(Tuning.Apply(request.Args)),
+            "kernel.patches" => Result(Patches.Applied ? Patches.Statuses : Patches.Preview()),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
             "wb.take" => Result(WorkbenchTake(request.Args)),
@@ -113,6 +114,7 @@ public static class HarnessOps
             FastMode = SaveManager.Instance.PrefsSave.FastMode.ToString(),
             Workbench = Switches.Applied,
             Patches = Patches.Count,
+            StalePatches = Patches.Stale,
         };
 
     private static List<CardInfo> ListCards() =>

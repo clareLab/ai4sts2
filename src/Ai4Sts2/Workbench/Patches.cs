@@ -16,6 +16,33 @@ using MegaCrit.Sts2.Core.Saves.Managers;
 
 namespace Ai4Sts2.Workbench;
 
+public enum PatchPurpose
+{
+    Perf,
+    Headless,
+    Semantics,
+    Workaround,
+}
+
+public sealed record PatchEntry(
+    Type Type,
+    string Method,
+    Type[] Parameters,
+    string Prefix,
+    PatchPurpose Purpose,
+    string? Il
+);
+
+public sealed record PatchStatus(
+    string Target,
+    string Purpose,
+    bool Applied,
+    string? Il,
+    string? Expected,
+    bool Stale,
+    string? Note
+);
+
 public static class Patches
 {
     private const BindingFlags Any =
@@ -27,7 +54,113 @@ public static class Patches
 
     public static int Count { get; private set; }
 
+    public static List<PatchStatus> Statuses { get; } = [];
+
+    public static int Stale => Statuses.Count(s => s.Stale);
+
     private static Harmony? _headless;
+
+    private static readonly PatchEntry[] _registry =
+    [
+        new(
+            typeof(CombatStateTracker),
+            "NotifyCombatStateChanged",
+            [typeof(string)],
+            nameof(SkipVoid),
+            PatchPurpose.Headless,
+            "5750C98D9F1F"
+        ),
+        new(
+            typeof(NDebugAudioManager),
+            "Play",
+            [typeof(string), typeof(float), typeof(PitchVariance)],
+            nameof(SkipInt),
+            PatchPurpose.Headless,
+            "F96C5D4CB4BC"
+        ),
+        new(
+            typeof(SaveManager),
+            "SaveRun",
+            [typeof(AbstractRoom), typeof(bool)],
+            nameof(SkipTask),
+            PatchPurpose.Semantics,
+            "FDCC8AE07FE4"
+        ),
+        new(typeof(SaveManager), "SaveProgressFile", [], nameof(SkipVoid), PatchPurpose.Semantics, "EAB7AD109464"),
+        new(
+            typeof(RunManager),
+            "OnEnded",
+            [typeof(bool)],
+            nameof(SkipRunEnded),
+            PatchPurpose.Semantics,
+            "7C4BE193B339"
+        ),
+        new(
+            typeof(CombatManager),
+            "SetReadyToBeginEnemyTurn",
+            [typeof(Player), typeof(Func<Task>)],
+            nameof(ReadyEveryoneToBeginEnemyTurn),
+            PatchPurpose.Semantics,
+            "5DF9CF97AD75"
+        ),
+        new(
+            typeof(NGame),
+            "ScreenShake",
+            [typeof(ShakeStrength), typeof(ShakeDuration), typeof(float)],
+            nameof(SkipVoid),
+            PatchPurpose.Headless,
+            "7AC9878C5009"
+        ),
+        new(
+            typeof(NGame),
+            "ScreenShakeTrauma",
+            [typeof(ShakeStrength)],
+            nameof(SkipVoid),
+            PatchPurpose.Headless,
+            "52DE5304CEB7"
+        ),
+        new(
+            typeof(SoulNexus),
+            "AfterDeath",
+            [typeof(Creature)],
+            nameof(SkipWithoutCombatRoom),
+            PatchPurpose.Workaround,
+            "8226EB050047"
+        ),
+        new(typeof(CombatState), "get_Creatures", [], nameof(Creatures), PatchPurpose.Perf, "9FED49BCF1F6"),
+        new(typeof(CombatState), "get_PlayerCreatures", [], nameof(PlayerCreatures), PatchPurpose.Perf, "198490C17EB2"),
+        new(typeof(CombatState), "get_Players", [], nameof(Players), PatchPurpose.Perf, "9061D2175D68"),
+    ];
+
+    public static List<PatchStatus> Preview()
+    {
+        var list = new List<PatchStatus>();
+        foreach (var entry in _registry)
+        {
+            var name = $"{entry.Type.Name}.{entry.Method}";
+            var target = entry.Type.GetMethod(entry.Method, Any, entry.Parameters);
+            var il = target is null ? null : Fingerprint(target);
+            var stale = target is null || (entry.Il is not null && entry.Il != il);
+            list.Add(
+                new PatchStatus(
+                    name,
+                    entry.Purpose.ToString(),
+                    false,
+                    il,
+                    entry.Il,
+                    stale,
+                    target is null ? "missing" : null
+                )
+            );
+        }
+        return list;
+    }
+
+    public static string Fingerprint(MethodBase method)
+    {
+        var il = method.GetMethodBody()?.GetILAsByteArray() ?? [];
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(il))[..12];
+    }
 
     public static void ApplyHeadless()
     {
@@ -55,38 +188,16 @@ public static class Patches
             return;
         }
         var harmony = new Harmony(Entry.ModId);
-        Prefix(harmony, typeof(CombatStateTracker), "NotifyCombatStateChanged", [typeof(string)], nameof(SkipVoid));
-        Prefix(
-            harmony,
-            typeof(NDebugAudioManager),
-            "Play",
-            [typeof(string), typeof(float), typeof(PitchVariance)],
-            nameof(SkipInt)
-        );
-        Prefix(harmony, typeof(SaveManager), "SaveRun", [typeof(AbstractRoom), typeof(bool)], nameof(SkipTask));
-        Prefix(harmony, typeof(SaveManager), "SaveProgressFile", [], nameof(SkipVoid));
-        Prefix(harmony, typeof(RunManager), "OnEnded", [typeof(bool)], nameof(SkipRunEnded));
-        Prefix(
-            harmony,
-            typeof(CombatManager),
-            "SetReadyToBeginEnemyTurn",
-            [typeof(Player), typeof(Func<Task>)],
-            nameof(ReadyEveryoneToBeginEnemyTurn)
-        );
-        Prefix(
-            harmony,
-            typeof(NGame),
-            "ScreenShake",
-            [typeof(ShakeStrength), typeof(ShakeDuration), typeof(float)],
-            nameof(SkipVoid)
-        );
-        Prefix(harmony, typeof(NGame), "ScreenShakeTrauma", [typeof(ShakeStrength)], nameof(SkipVoid));
-        Prefix(harmony, typeof(SoulNexus), "AfterDeath", [typeof(Creature)], nameof(SkipWithoutCombatRoom));
-        Prefix(harmony, typeof(CombatState), "get_Creatures", [], nameof(Creatures));
-        Prefix(harmony, typeof(CombatState), "get_PlayerCreatures", [], nameof(PlayerCreatures));
-        Prefix(harmony, typeof(CombatState), "get_Players", [], nameof(Players));
+        foreach (var entry in _registry)
+        {
+            Prefix(harmony, entry);
+        }
         PrefixRitsuLibBaseLibBridge(harmony);
         _harmony = harmony;
+        if (Stale > 0)
+        {
+            Entry.Log.Warn($"{Stale} patch target(s) changed since their fingerprints were recorded");
+        }
     }
 
     private static void PrefixRitsuLibBaseLibBridge(Harmony harmony)
@@ -126,6 +237,9 @@ public static class Patches
             {
                 _ = harmony.Patch(method, prefix: new HarmonyMethod(prefix));
                 Count++;
+                Statuses.Add(
+                    new PatchStatus($"{bridge.Name}.After", "Perf", true, Fingerprint(method), null, false, "ritsulib")
+                );
             }
         }
     }
@@ -143,19 +257,35 @@ public static class Patches
         if (target is null)
         {
             Entry.Log.Warn($"{typeName}.{method} not found; skipping its patch");
+            Statuses.Add(new PatchStatus($"{typeName}.{method}", "Perf", false, null, null, false, "missing"));
             return;
         }
         var prefix = typeof(Patches).GetMethod(prefixName, BindingFlags.Static | BindingFlags.NonPublic);
         _ = harmony.Patch(target, prefix: new HarmonyMethod(prefix));
         Count++;
+        Statuses.Add(
+            new PatchStatus($"{typeName}.{method}", "Perf", true, Fingerprint(target), null, false, "ritsulib")
+        );
     }
 
-    private static void Prefix(Harmony harmony, Type type, string method, Type[] parameters, string prefixName)
+    private static void Prefix(Harmony harmony, PatchEntry entry)
     {
-        var target = type.GetMethod(method, Any, parameters) ?? throw new MissingMethodException(type.FullName, method);
-        var prefix = typeof(Patches).GetMethod(prefixName, BindingFlags.Static | BindingFlags.NonPublic);
+        var name = $"{entry.Type.Name}.{entry.Method}";
+        var target = entry.Type.GetMethod(entry.Method, Any, entry.Parameters);
+        if (target is null)
+        {
+            Entry.Log.Warn($"{name} not found; skipping its patch");
+            Statuses.Add(new PatchStatus(name, entry.Purpose.ToString(), false, null, entry.Il, true, "missing"));
+            return;
+        }
+        var il = Fingerprint(target);
+        var stale = entry.Il is not null && entry.Il != il;
+        var prefix = typeof(Patches).GetMethod(entry.Prefix, BindingFlags.Static | BindingFlags.NonPublic);
         _ = harmony.Patch(target, prefix: new HarmonyMethod(prefix));
         Count++;
+        Statuses.Add(
+            new PatchStatus(name, entry.Purpose.ToString(), true, il, entry.Il, stale, stale ? "changed" : null)
+        );
     }
 
     private static bool SkipVoid() => !Switches.Applied;
