@@ -61,6 +61,7 @@ public static class HarnessOps
             "wb.warmup" => WorkbenchWarmupAsync(host, request.Args),
             "wb.census" => Result(Census.Run()),
             "wb.snap" => Result(WorkbenchSnap()),
+            "wb.snapbench" => Result(WorkbenchSnapBench(request.Args)),
             "wb.restore" => Result(WorkbenchRestore(request.Args)),
             "wb.search" => Result(WorkbenchSearch(request.Args)),
             _ => throw new NotSupportedException($"unknown op '{request.Op}'"),
@@ -305,6 +306,36 @@ public static class HarnessOps
             snap.Objects,
             snap.Arrays,
             snap.Fields,
+        };
+    }
+
+    private static object WorkbenchSnapBench(JsonElement? args)
+    {
+        var n = args is { } a && a.TryGetProperty("n", out var v) ? v.GetInt32() : 200;
+        var snaps = new List<double>(n);
+        var restores = new List<double>(n);
+        Snapshot? last = null;
+        var gen0 = GC.CollectionCount(0);
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < n; i++)
+        {
+            var snap = Loader.Take();
+            snaps.Add(snap.Elapsed.TotalMicroseconds);
+            restores.Add(snap.Restore().TotalMicroseconds);
+            last?.Release();
+            last = snap;
+        }
+        return new
+        {
+            N = n,
+            Snap = Stats(snaps),
+            Restore = Stats(restores),
+            Gen0 = GC.CollectionCount(0) - gen0,
+            AllocatedPerIteration = (GC.GetAllocatedBytesForCurrentThread() - allocated) / n,
+            last?.Objects,
+            last?.Arrays,
+            last?.Fields,
+            last?.Bytes,
         };
     }
 

@@ -115,6 +115,7 @@ public sealed class Search(Session session, int maxNodes, int maxDepth)
         var leaf = Evaluate();
         path.RemoveAt(path.Count - 1);
         RestoreSnapshot(snap);
+        snap.Release();
         _leaves++;
         if (leaf > bestScore)
         {
