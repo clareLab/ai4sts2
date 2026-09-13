@@ -4,8 +4,10 @@ using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -79,6 +81,7 @@ public static class Patches
             nameof(SkipVoid)
         );
         Prefix(harmony, typeof(NGame), "ScreenShakeTrauma", [typeof(ShakeStrength)], nameof(SkipVoid));
+        Prefix(harmony, typeof(SoulNexus), "AfterDeath", [typeof(Creature)], nameof(SkipWithoutCombatRoom));
         Prefix(harmony, typeof(CombatState), "get_Creatures", [], nameof(Creatures));
         Prefix(harmony, typeof(CombatState), "get_PlayerCreatures", [], nameof(PlayerCreatures));
         Prefix(harmony, typeof(CombatState), "get_Players", [], nameof(Players));
@@ -156,6 +159,8 @@ public static class Patches
     }
 
     private static bool SkipVoid() => !Switches.Applied;
+
+    private static bool SkipWithoutCombatRoom() => NCombatRoom.Instance is not null;
 
     private static bool SkipInt(ref int __result)
     {

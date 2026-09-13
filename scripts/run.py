@@ -397,7 +397,11 @@ def play_run(wb, a, seed):
                 else ""
             )
             + (f"  event {entry['event']['chosen']}" if entry.get("event") else "")
-            + (f"  relic {entry['treasure']['picked']}" if entry.get("treasure") else "")
+            + (
+                f"  relic {'/'.join(str(r) for r in entry['treasure'].get('pickedAll') or [entry['treasure']['picked']])}"
+                if entry.get("treasure")
+                else ""
+            )
             + (f"  shop {[b.get('id') or b.get('card') for b in entry['shop']['bought']]}" if entry.get("shop") else "")
         )
         if outcome == "act-cleared":
