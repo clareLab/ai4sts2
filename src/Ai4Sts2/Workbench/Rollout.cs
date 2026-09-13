@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -377,18 +378,21 @@ public static class Rollout
     private static Dictionary<CardModel, int> DeckState(RunState run) =>
         run.Players.SelectMany(p => p.Deck.Cards).ToDictionary(c => c, c => c.CurrentUpgradeLevel);
 
-    private static HashSet<CardModel> Changed(Dictionary<CardModel, int> before, RunState run)
+    private static HashSet<CardModel> Added(Dictionary<CardModel, int> before, RunState run)
     {
         var set = new HashSet<CardModel>();
         foreach (var card in run.Players.SelectMany(p => p.Deck.Cards))
         {
-            if (!before.TryGetValue(card, out var level) || level != card.CurrentUpgradeLevel)
+            if (!before.ContainsKey(card))
             {
                 _ = set.Add(card);
             }
         }
         return set;
     }
+
+    private static int Bulk(IEnumerable<Creature> enemies, Func<Creature, int> measure) =>
+        enemies.Where(e => e.MaxHp < 1_000_000).Sum(measure);
 
     public static RolloutSummary Fights(Session session, SearchOptions options, RolloutPlan plan)
     {
@@ -434,10 +438,10 @@ public static class Rollout
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
             var state = session.StartEncounter(encounter.Id.Entry, false);
             Spotlight(run);
-            var eliteMax = state.Enemies.Sum(e => e.MaxHp);
+            var eliteMax = Bulk(state.Enemies, e => e.MaxHp);
             var (won, turns, nodes, micros) = PlayCombat(session, options, plan.EliteTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
-            var remaining = state.Enemies.Where(e => e.IsAlive).Sum(e => e.CurrentHp);
+            var remaining = Bulk(state.Enemies, e => e.IsAlive ? e.CurrentHp : 0);
             elite = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
             var alive = run.Players.Any(p => p.Creature.IsAlive);
             score += ((eliteMax - remaining) * 3) - ((before - after) * 8) + (won ? 2000 : 0);
@@ -456,10 +460,10 @@ public static class Rollout
             var before = run.Players.Sum(p => p.Creature.CurrentHp);
             var state = session.StartEncounter(encounter.Id.Entry, false);
             Spotlight(run);
-            var bossMax = state.Enemies.Sum(e => e.MaxHp);
+            var bossMax = Bulk(state.Enemies, e => e.MaxHp);
             var (won, turns, nodes, micros) = PlayCombat(session, options, plan.BossTurns);
             var after = run.Players.Sum(p => p.Creature.CurrentHp);
-            var remaining = state.Enemies.Where(e => e.IsAlive).Sum(e => e.CurrentHp);
+            var remaining = Bulk(state.Enemies, e => e.IsAlive ? e.CurrentHp : 0);
             bossDamage = bossMax - remaining;
             boss = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
             var alive = run.Players.Any(p => p.Creature.IsAlive);
@@ -505,7 +509,7 @@ public static class Rollout
                 foreach (var i in finalists)
                 {
                     applies[i]();
-                    _focus = Changed(before, run);
+                    _focus = Added(before, run);
                     results[i] = Fights(session, options, screen);
                     _ = Loader.Restore(root, session.Pump);
                 }
@@ -517,7 +521,7 @@ public static class Rollout
             foreach (var i in finalists)
             {
                 applies[i]();
-                _focus = Changed(before, run);
+                _focus = Added(before, run);
                 results[i] = Fights(session, options, plan);
                 _ = Loader.Restore(root, session.Pump);
             }

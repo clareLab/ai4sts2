@@ -667,7 +667,7 @@ public static class HarnessOps
         var choices = new List<(string Label, int? Index, Action Apply)>();
         foreach (var option in options)
         {
-            if (option.OptionId == "HEAL" && option.IsEnabled)
+            if (option.OptionId == "HEAL" && option.IsEnabled && player.Creature.CurrentHp < player.Creature.MaxHp)
             {
                 var amount = (int)HealRestSiteOption.GetHealAmount(player);
                 choices.Add(
@@ -705,17 +705,25 @@ public static class HarnessOps
     private static IEnumerable<int> SmithCandidates(Session session, List<CardModel> deck)
     {
         var limit = Tuning.SmithCandidates;
+        var copies = deck.GroupBy(c => c.Id.Entry).ToDictionary(g => g.Key, g => g.Count());
+        double Rate(int i)
+        {
+            return (double)session.CardPlays.GetValueOrDefault(deck[i].Id.Entry) / copies[deck[i].Id.Entry];
+        }
+
+        var seen = new HashSet<string>();
         var ranked = Enumerable
             .Range(0, deck.Count)
-            .OrderByDescending(i => session.CardPlays.GetValueOrDefault(deck[i].Id.Entry))
+            .OrderByDescending(Rate)
             .ThenBy(i => i)
+            .Where(i => seen.Add($"{deck[i].Id.Entry}+{deck[i].CurrentUpgradeLevel}"))
             .ToList();
         if (limit <= 0 || ranked.Count <= limit)
         {
             return ranked;
         }
-        var cut = Math.Max(1, session.CardPlays.GetValueOrDefault(deck[ranked[limit - 1]].Id.Entry));
-        return ranked.Where((i, rank) => rank < limit || session.CardPlays.GetValueOrDefault(deck[i].Id.Entry) >= cut);
+        var cut = Math.Max(0.5, Rate(ranked[limit - 1]));
+        return ranked.Where((i, rank) => rank < limit || Rate(i) >= cut);
     }
 
     private static object WorkbenchEvalSmith(JsonElement? args)
