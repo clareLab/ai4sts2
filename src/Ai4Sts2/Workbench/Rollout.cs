@@ -488,10 +488,9 @@ public static class Rollout
                 }
                 _ =
                     reward.Kind == "card"
-                        ? flow.TakeRewardUnsynchronized(reward.Index, 0, null)
-                        : flow.TakeRewardUnsynchronized(reward.Index, null, null);
+                        ? flow.TakeRewardUnsynchronized(reward.Index, 0, null, set.Player)
+                        : flow.TakeRewardUnsynchronized(reward.Index, null, null, set.Player);
             }
-            break;
         }
     }
 
@@ -499,14 +498,19 @@ public static class Rollout
         Session session,
         int rewardIndex,
         SearchOptions options,
-        RolloutPlan plan
+        RolloutPlan plan,
+        int player = 0
     )
     {
         var sw = Stopwatch.StartNew();
         var view = session.Flow.View();
         var reward =
-            view.Rewards.SelectMany(r => r.Rewards).FirstOrDefault(r => r.Index == rewardIndex && r.Kind == "card")
-            ?? throw new InvalidOperationException($"reward {rewardIndex} is not an open card reward");
+            view.Rewards.Where(r => r.Player == player)
+                .SelectMany(r => r.Rewards)
+                .FirstOrDefault(r => r.Index == rewardIndex && r.Kind == "card")
+            ?? throw new InvalidOperationException(
+                $"reward {rewardIndex} is not an open card reward for player {player}"
+            );
         var choices = new List<(string Label, int? Card, string? Alternative)>();
         for (var i = 0; i < reward.Cards!.Count; i++)
         {
@@ -521,7 +525,7 @@ public static class Rollout
             {
                 if (card is not null)
                 {
-                    _ = session.Flow.TakeRewardUnsynchronized(rewardIndex, card, alternative);
+                    _ = session.Flow.TakeRewardUnsynchronized(rewardIndex, card, alternative, player);
                 }
                 var summary = Fights(session, options, plan);
                 results.Add(new RewardOptionResult(label, card, alternative, summary));

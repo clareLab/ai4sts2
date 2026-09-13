@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
 using MegaCrit.Sts2.Core.Rooms;
@@ -63,6 +64,13 @@ public static class Patches
         Prefix(harmony, typeof(SaveManager), "SaveRun", [typeof(AbstractRoom), typeof(bool)], nameof(SkipTask));
         Prefix(harmony, typeof(SaveManager), "SaveProgressFile", [], nameof(SkipVoid));
         Prefix(harmony, typeof(RunManager), "OnEnded", [typeof(bool)], nameof(SkipRunEnded));
+        Prefix(
+            harmony,
+            typeof(CombatManager),
+            "SetReadyToBeginEnemyTurn",
+            [typeof(Player), typeof(Func<Task>)],
+            nameof(ReadyEveryoneToBeginEnemyTurn)
+        );
         Prefix(
             harmony,
             typeof(NGame),
@@ -160,6 +168,29 @@ public static class Patches
         amount = 0;
         __result = false;
         return !Switches.Applied;
+    }
+
+    private static void ReadyEveryoneToBeginEnemyTurn(CombatManager __instance, Player player)
+    {
+        if (!Switches.Applied || RunManager.Instance.NetService.Type != NetGameType.Host)
+        {
+            return;
+        }
+        var ts = __instance._turnState;
+        if (ts is null || !ts.IsInProgress || ts.State.CurrentSide != CombatSide.Player)
+        {
+            return;
+        }
+        using (ts.ReadyLock.EnterScope())
+        {
+            foreach (var other in ts.State.Players)
+            {
+                if (other != player)
+                {
+                    _ = ts.PlayersReadyToBeginEnemyTurn.Add(other);
+                }
+            }
+        }
     }
 
     private static bool SkipRunEnded(ref SerializableRun __result)

@@ -67,6 +67,8 @@ public static class HarnessOps
             "wb.warmup" => WorkbenchWarmupAsync(host, request.Args),
             "wb.census" => Result(Census.Run()),
             "wb.awaits" => Result(WorkbenchAwaits()),
+            "wb.turnstate" => Result(WorkbenchTurnState()),
+            "wb.sethp" => Result(WorkbenchSetHp(request.Args)),
             "wb.snap" => Result(WorkbenchSnap()),
             "wb.snapbench" => Result(WorkbenchSnapBench(request.Args)),
             "wb.restore" => Result(WorkbenchRestore(request.Args)),
@@ -75,7 +77,7 @@ public static class HarnessOps
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
             "wb.take" => Result(WorkbenchTake(request.Args)),
-            "wb.skip" => Result(WorkbenchSkip()),
+            "wb.skip" => Result(WorkbenchSkip(request.Args)),
             "wb.rest" => Result(WorkbenchRest(request.Args)),
             "selector.enqueue" => Result(SelectorEnqueue(request.Args)),
             "wb.event" => Result(WorkbenchEvent(request.Args)),
@@ -361,7 +363,7 @@ public static class HarnessOps
         var seed = a.TryGetProperty("seed", out var s) ? s.GetString()! : "AI4STS2";
         var ascension = a.TryGetProperty("ascension", out var asc) ? asc.GetInt32() : 0;
         var map = a.TryGetProperty("map", out var m) && m.GetBoolean();
-        return RunSetup.Capture(Session.Instance.NewRun(Characters(a), seed, ascension, map));
+        return RunSetup.Capture(Session.Instance.NewRun(Characters(a), seed, ascension, map, HostRequested(a)));
     }
 
     private static object WorkbenchView() => Flow(Session.Instance.Flow.View());
@@ -385,13 +387,15 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         int? card = a.TryGetProperty("card", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : null;
         var alternative = a.TryGetProperty("alternative", out var alt) ? alt.GetString() : null;
-        var ok = Session.Instance.Flow.TakeReward(a.GetProperty("index").GetInt32(), card, alternative);
+        var player = a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
+        var ok = Session.Instance.Flow.TakeReward(a.GetProperty("index").GetInt32(), card, alternative, player);
         return Flow(Session.Instance.Flow.View(), null, ok);
     }
 
-    private static object WorkbenchSkip()
+    private static object WorkbenchSkip(JsonElement? args)
     {
-        Session.Instance.Flow.SkipRewards();
+        var player = args is { } a && a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
+        Session.Instance.Flow.SkipRewards(player);
         return Flow(Session.Instance.Flow.View());
     }
 
@@ -504,7 +508,8 @@ public static class HarnessOps
             Session.Instance,
             a.GetProperty("index").GetInt32(),
             SearchOptionsFrom(a),
-            PlanFrom(a)
+            PlanFrom(a),
+            a.TryGetProperty("player", out var rp) ? rp.GetInt32() : 0
         );
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
     }
@@ -639,6 +644,10 @@ public static class HarnessOps
             Ok = ok,
         };
 
+    private static bool HostRequested(JsonElement a) =>
+        (a.TryGetProperty("net", out var n) ? n.GetString() : System.Environment.GetEnvironmentVariable("AI4STS2_NET"))
+        == "host";
+
     private static List<string> Characters(JsonElement a)
     {
         if (a.TryGetProperty("characters", out var list) && list.ValueKind == JsonValueKind.Array)
@@ -658,7 +667,7 @@ public static class HarnessOps
         var encounter = a.GetProperty("encounter").GetString()!.ToUpperInvariant();
         var heal = !a.TryGetProperty("heal", out var h) || h.GetBoolean();
         var session = Session.Instance;
-        var run = session.EnsureRun(Characters(a), seed, ascension);
+        var run = session.EnsureRun(Characters(a), seed, ascension, false, HostRequested(a));
         if (a.TryGetProperty("rng", out var rng))
         {
             RunSetup.RestoreRng(run, rng.Deserialize<Dictionary<string, RngState>>(HarnessJson.Options)!);
@@ -698,6 +707,45 @@ public static class HarnessOps
         var player = args is { } a && a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
         var elapsed = Session.Instance.EndTurn(player);
         return new { EndTurnMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
+    }
+
+    private static object WorkbenchTurnState()
+    {
+        var ts = CombatManager.Instance._turnState;
+        if (ts is null)
+        {
+            return new { InProgress = false };
+        }
+        return new
+        {
+            InProgress = ts.IsInProgress,
+            Side = ts.State.CurrentSide.ToString(),
+            ReadyEnd = ts.PlayersReadyToEndTurn.Select(p => p.NetId).ToList(),
+            ReadyBegin = ts.PlayersReadyToBeginEnemyTurn.Select(p => p.NetId).ToList(),
+            Phase1 = ts.EndingPlayerTurnPhaseOne,
+            Phase2 = ts.EndingPlayerTurnPhaseTwo,
+            Players = ts
+                .State.Players.Select(p => new
+                {
+                    p.NetId,
+                    Phase = p.PlayerCombatState?.Phase.ToString(),
+                    Turn = p.PlayerCombatState?.TurnNumber,
+                    Alive = p.Creature.IsAlive,
+                })
+                .ToList(),
+            Net = RunManager.Instance.NetService.Type.ToString(),
+            PerPlayerEnds = Session.PerPlayerEnds,
+        };
+    }
+
+    private static object WorkbenchSetHp(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var run = Session.Instance.Run ?? throw new InvalidOperationException("run not set up");
+        var player = run.Players[a.TryGetProperty("player", out var p) ? p.GetInt32() : 0];
+        var hp = a.GetProperty("hp").GetInt32();
+        player.Creature._currentHp = Math.Min(hp, player.Creature.MaxHp);
+        return new { Hp = player.Creature.CurrentHp };
     }
 
     private static object WorkbenchAwaits()

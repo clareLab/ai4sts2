@@ -8,7 +8,6 @@ using MegaCrit.Sts2.Core.Entities.Rngs;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.Rooms;
-using MegaCrit.Sts2.Core.Runs;
 
 namespace Ai4Sts2.Workbench;
 
@@ -45,7 +44,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         var state = State();
         var list = new List<SearchAction>();
         var enemies = state.Enemies.Select((e, i) => (e, i)).Where(x => x.e.IsAlive).ToList();
-        var separateEnds = !RunManager.Instance.IsSingleplayerOrFakeMultiplayer && state.Players.Count > 1;
+        var separateEnds = Session.PerPlayerEnds;
         for (var p = 0; p < state.Players.Count; p++)
         {
             var player = state.Players[p];
@@ -125,7 +124,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             if (!Session.HasEnded(state.Players[p]))
             {
                 list.Add(new SearchAction("end", p, -1, null, null));
-                if (RunManager.Instance.IsSingleplayerOrFakeMultiplayer)
+                if (!Session.PerPlayerEnds)
                 {
                     break;
                 }

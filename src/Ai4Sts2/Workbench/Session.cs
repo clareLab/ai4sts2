@@ -12,6 +12,7 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -50,7 +51,21 @@ public sealed class Session
 
     public RunState NewRun(string character, string seed, int ascension) => NewRun([character], seed, ascension);
 
-    public RunState NewRun(IReadOnlyList<string> characters, string seed, int ascension, bool realMap = false)
+    public bool Host { get; private set; }
+
+    public static bool PerPlayerEnds =>
+        RunManager.Instance.IsInProgress
+        && RunManager.Instance.State is { } state
+        && state.Players.Count > 1
+        && RunManager.Instance.NetService.Type == NetGameType.Host;
+
+    public RunState NewRun(
+        IReadOnlyList<string> characters,
+        string seed,
+        int ascension,
+        bool realMap = false,
+        bool host = false
+    )
     {
         if (Run is not null)
         {
@@ -71,18 +86,25 @@ public sealed class Session
             _selectorScope?.Dispose();
             _selectorScope = null;
         }
-        return EnsureRun(characters, seed, ascension, realMap);
+        return EnsureRun(characters, seed, ascension, realMap, host);
     }
 
     public RunState EnsureRun(string character, string seed, int ascension) => EnsureRun([character], seed, ascension);
 
-    public RunState EnsureRun(IReadOnlyList<string> characters, string seed, int ascension, bool realMap = false)
+    public RunState EnsureRun(
+        IReadOnlyList<string> characters,
+        string seed,
+        int ascension,
+        bool realMap = false,
+        bool host = false
+    )
     {
         if (Run is not null)
         {
             return Run;
         }
         RealMap = realMap;
+        Host = host && characters.Count > 1;
         LocalContext.NetId = LocalNetId;
         if (!Switches.Applied)
         {
@@ -115,7 +137,7 @@ public sealed class Session
         {
             state.Map = new MockSinglePointActMap();
         }
-        RunManager.Instance.SetUpTest(state, new NetSingleplayerGameService());
+        RunManager.Instance.SetUpTest(state, Host ? new HeadlessHostGameService() : new NetSingleplayerGameService());
         Run = state;
         _selectorScope = CardSelectCmd.PushSelector(Selector);
         if (realMap)
@@ -328,15 +350,24 @@ public sealed class Session
             return;
         }
         var state = CombatManager.Instance.DebugOnlyGetState();
-        var pcs = state is null ? null : LocalContext.GetMe(state)?.PlayerCombatState;
-        if (pcs is { Phase: PlayerTurnPhase.Play } && pcs.TurnNumber > afterTurn)
+        var alive = state?.Players.Where(p => p.Creature.IsAlive).ToList() ?? [];
+        if (alive.Count == 0)
         {
             return;
         }
+        if (alive.Any(p => p.PlayerCombatState is { Phase: PlayerTurnPhase.Play } pcs && pcs.TurnNumber > afterTurn))
+        {
+            return;
+        }
+        var ts = CombatManager.Instance._turnState;
+        var phases = string.Join(
+            ",",
+            alive.Select(p => $"{p.NetId}:{p.PlayerCombatState?.Phase}/{p.PlayerCombatState?.TurnNumber}")
+        );
         var chain = string.Join(" | ", AwaitChain.Describe(CombatManager.Instance._turnLoopTask, 12));
         Entry.Log.Error($"leaked await at {label}: {chain}");
         throw new LeakedAwaitException(
-            $"{label}: phase={pcs?.Phase} turn={pcs?.TurnNumber} after pump drained (posted={Pump.Posted}, drained={Pump.Drained}, foreign={Pump.Foreign}) awaits: {chain}"
+            $"{label}: players={phases} side={ts?.State.CurrentSide} readyEnd={ts?.PlayersReadyToEndTurn.Count} readyBegin={ts?.PlayersReadyToBeginEnemyTurn.Count} after pump drained (posted={Pump.Posted}, drained={Pump.Drained}, foreign={Pump.Foreign}) awaits: {chain}"
         );
     }
 

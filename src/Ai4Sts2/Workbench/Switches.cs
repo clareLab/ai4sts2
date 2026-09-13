@@ -30,20 +30,36 @@ public static class Switches
     private static async Task SelectRewardsLeniently(RewardsSet set)
     {
         var sync = RunManager.Instance.RewardsSetSynchronizer;
+        var local = set.Player.NetId == sync._localPlayerId;
+        var state = local
+            ? null
+            : sync.GetRewardStateForPlayer(set.Player).rewardsStack.LastOrDefault(s => s.set == set);
+        if (!local && state is null)
+        {
+            return;
+        }
         foreach (var reward in set.Rewards.ToList())
         {
             try
             {
-                _ = await sync.SelectLocalReward(reward);
+                _ = local ? await sync.SelectLocalReward(reward) : await sync.SelectRewardForPlayer(state!, reward);
             }
             catch (InvalidOperationException e)
             {
-                Entry.Log.Warn($"reward {reward} not taken: {e.Message}");
+                Entry.Log.Warn($"reward {reward} for {set.Player.NetId} not taken: {e.Message}");
             }
         }
-        if (!sync.IsRewardsSetCompleted(set))
+        if (sync.IsRewardsSetCompleted(set))
+        {
+            return;
+        }
+        if (local)
         {
             sync.SkipLocalRewardsSet();
+        }
+        else
+        {
+            sync.SkipRewardsSet(state!);
         }
     }
 

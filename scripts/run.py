@@ -161,29 +161,35 @@ def take_rewards(wb, a, entry):
     view = wb.call("wb.rewards")["view"]
     taken = []
     for set_view in view["rewards"]:
+        player = set_view["player"]
         for reward in set_view["rewards"]:
             if reward["kind"] == "card":
-                ev = wb.call("wb.evalreward", {"index": reward["index"], **plan_args(a)})["evaluation"]
-                entry["evaluation"] = ev
-                best = next(o for o in ev["options"] if o["label"] == ev["best"])
-                if best.get("card") is not None:
-                    res = wb.call("wb.take", {"index": reward["index"], "card": best["card"]})
-                    taken.append({"kind": "card", "card": best["label"], "ok": res["ok"]})
+                ev = wb.call("wb.evalreward", {"index": reward["index"], "player": player, **plan_args(a)})[
+                    "evaluation"
+                ]
+                entry.setdefault("evaluations", []).append(ev)
+                if player == 0:
+                    entry["evaluation"] = ev
+                best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+                if best is not None and best.get("card") is not None:
+                    res = wb.call("wb.take", {"index": reward["index"], "card": best["card"], "player": player})
+                    taken.append({"kind": "card", "card": best["label"], "ok": res["ok"], "player": player})
                 else:
-                    taken.append({"kind": "card", "card": None, "ok": True})
+                    taken.append({"kind": "card", "card": None, "ok": True, "player": player})
             else:
-                res = wb.call("wb.take", {"index": reward["index"]})
+                res = wb.call("wb.take", {"index": reward["index"], "player": player})
                 taken.append(
                     {
                         "kind": reward["kind"],
                         "value": reward.get("gold") or reward.get("potion") or reward.get("relic"),
                         "ok": res["ok"],
+                        "player": player,
                     }
                 )
-        break
     view = wb.call("wb.view")["view"]
-    if view["rewards"] and not view["rewards"][0]["completed"]:
-        wb.call("wb.skip")
+    for set_view in view["rewards"]:
+        if not set_view["completed"]:
+            wb.call("wb.skip", {"player": set_view["player"]})
     entry["taken"] = taken
 
 

@@ -343,7 +343,7 @@ public sealed class RunFlow(Session session)
         }
         if (_offered.Count > 0)
         {
-            MirrorRewards();
+            SkipLeftoverRewards();
         }
         _offered.Clear();
         session.DropSnapshots();
@@ -384,30 +384,35 @@ public sealed class RunFlow(Session session)
         return View().Rewards;
     }
 
-    public bool TakeReward(int index, int? card, string? alternative)
+    public bool TakeReward(int index, int? card, string? alternative, int player = 0)
     {
-        var (set, _) = Current();
+        var sync = RunManager.Instance.RewardsSetSynchronizer;
+        var (set, _) = Current(player);
         var reward = set.Rewards[index];
         session.Selector.CardReward = (card, alternative);
         var ok = false;
         using (Session.ActAs(set.Player))
         {
-            session.Pump.Drive(
-                async () => ok = await RunManager.Instance.RewardsSetSynchronizer.SelectLocalReward(reward),
-                $"take reward {index}"
-            );
+            if (set.Player.NetId == sync._localPlayerId)
+            {
+                session.Pump.Drive(async () => ok = await sync.SelectLocalReward(reward), $"take reward {index}");
+            }
+            else
+            {
+                var state = sync.GetRewardStateForPlayer(set.Player).rewardsStack.Last(s => s.set == set);
+                session.Pump.Drive(
+                    async () => ok = await sync.SelectRewardForPlayer(state, reward),
+                    $"take reward {index} for {set.Player.NetId}"
+                );
+            }
         }
         session.Selector.CardReward = null;
-        if (RunManager.Instance.RewardsSetSynchronizer.IsRewardsSetCompleted(set))
-        {
-            MirrorRewards();
-        }
         return ok;
     }
 
-    public bool TakeRewardUnsynchronized(int index, int? card, string? alternative)
+    public bool TakeRewardUnsynchronized(int index, int? card, string? alternative, int player = 0)
     {
-        var (set, _) = Current();
+        var (set, _) = Current(player);
         var reward = set.Rewards[index];
         session.Selector.CardReward = (card, alternative);
         var ok = false;
@@ -422,14 +427,32 @@ public sealed class RunFlow(Session session)
         return ok;
     }
 
-    public void SkipRewards()
+    public void SkipRewards(int player = 0)
     {
-        var (set, _) = Current();
+        var sync = RunManager.Instance.RewardsSetSynchronizer;
+        var (set, _) = Current(player);
         using (Session.ActAs(set.Player))
         {
-            session.Pump.Run(RunManager.Instance.RewardsSetSynchronizer.SkipLocalRewardsSet);
+            session.Pump.Run(() =>
+            {
+                if (set.Player.NetId == sync._localPlayerId)
+                {
+                    sync.SkipLocalRewardsSet();
+                }
+                else
+                {
+                    _ = sync.SkipRewardsSetOnStackTopForPlayer(set.Player);
+                }
+            });
         }
-        MirrorRewards();
+    }
+
+    public bool HasOpenRewards(int player)
+    {
+        var sync = RunManager.Instance.RewardsSetSynchronizer;
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        return player < run.Players.Count
+            && _offered.Any(e => e.Set.Player == run.Players[player] && !sync.IsRewardsSetCompleted(e.Set));
     }
 
     public bool Rest(string optionId)
@@ -464,7 +487,7 @@ public sealed class RunFlow(Session session)
     private static IEnumerable<Player> Others(RunState run) =>
         run.Players.Where(p => p.NetId != LocalContext.NetId && p.Creature.IsAlive);
 
-    private void MirrorRewards()
+    private void SkipLeftoverRewards()
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         var sync = RunManager.Instance.RewardsSetSynchronizer;
@@ -473,43 +496,24 @@ public sealed class RunFlow(Session session)
             var state = sync.GetRewardStateForPlayer(other);
             while (state.rewardsStack.Count > 0)
             {
-                var top = state.rewardsStack[^1];
-                foreach (var reward in top.set.Rewards.ToList())
-                {
-                    if (reward.SuccessfullySelected)
-                    {
-                        continue;
-                    }
-                    using var scope = Session.ActAs(other);
-                    session.Selector.CardReward = reward is CardReward ? (0, null) : null;
-                    session.Pump.Drive(
-                        () => sync.SelectRewardForPlayer(top, reward),
-                        $"mirror reward for {other.NetId}"
-                    );
-                    session.Selector.CardReward = null;
-                }
-                if (state.rewardsStack.Count > 0 && state.rewardsStack[^1] == top)
-                {
-                    _ = sync.SkipRewardsSetOnStackTopForPlayer(other);
-                }
+                _ = sync.SkipRewardsSetOnStackTopForPlayer(other);
             }
         }
     }
 
-    private (RewardsSet Set, Task Done) Current()
+    private (RewardsSet Set, Task Done) Current(int player)
     {
         var sync = RunManager.Instance.RewardsSetSynchronizer;
-        var local = LocalContext.NetId;
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var owner = player < run.Players.Count ? run.Players[player] : null;
         foreach (var entry in _offered)
         {
-            if (!sync.IsRewardsSetCompleted(entry.Set) && entry.Set.Player.NetId == local)
+            if (!sync.IsRewardsSetCompleted(entry.Set) && entry.Set.Player == owner)
             {
                 return entry;
             }
         }
-        return _offered.FirstOrDefault(e => !sync.IsRewardsSetCompleted(e.Set)) is { Set: not null } open
-            ? open
-            : throw new InvalidOperationException("no open rewards set");
+        throw new InvalidOperationException($"no open rewards set for player {player}");
     }
 
     private static RewardView Describe(Reward reward, int index) =>
