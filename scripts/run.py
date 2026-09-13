@@ -37,6 +37,7 @@ def autoplay(wb, a, hard=False):
             "leaf": "estimate",
             "beam": a.boss_beam if hard else a.beam,
             "turns": a.boss_turns_search if hard else a.turns,
+            "escalate": a.escalate,
         },
     )
 
@@ -293,6 +294,7 @@ def main():
     ap.add_argument("--boss-nodes", type=int, default=800)
     ap.add_argument("--boss-beam", type=int, default=5)
     ap.add_argument("--boss-turns-search", type=int, default=2)
+    ap.add_argument("--escalate", type=float, default=0.0)
     ap.add_argument("--fights", type=int, default=2)
     ap.add_argument("--instance", default="wb")
     ap.add_argument("--paths", action="store_true")
@@ -330,6 +332,7 @@ def main():
             "beam": a.beam,
             "turns": a.turns,
             "bossSearch": {"maxNodes": a.boss_nodes, "beam": a.boss_beam, "turns": a.boss_turns_search},
+            "escalate": a.escalate,
             "fights": a.fights,
             "paths": a.paths,
             "boss": a.boss,

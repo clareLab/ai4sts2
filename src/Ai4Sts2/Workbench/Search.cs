@@ -10,7 +10,8 @@ public sealed record SearchOptions(
     int Turns,
     int MaxTotalNodes = 0,
     bool Diversify = true,
-    bool Canonical = true
+    bool Canonical = true,
+    double Escalate = double.NegativeInfinity
 )
 {
     public int TotalBudget => MaxTotalNodes > 0 ? MaxTotalNodes : MaxNodes * 4;

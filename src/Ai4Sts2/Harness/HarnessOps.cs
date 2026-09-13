@@ -473,7 +473,18 @@ public static class HarnessOps
         var totalNodes = a.TryGetProperty("maxTotalNodes", out var tn) ? tn.GetInt32() : 0;
         var diversify = !a.TryGetProperty("diversify", out var dv) || dv.GetBoolean();
         var canonical = !a.TryGetProperty("canonical", out var cn) || cn.GetBoolean();
-        return new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns, totalNodes, diversify, canonical);
+        var escalate = a.TryGetProperty("escalate", out var es) ? es.GetDouble() : double.NegativeInfinity;
+        return new SearchOptions(
+            maxNodes,
+            maxDepth,
+            leaf == "estimate",
+            beam,
+            turns,
+            totalNodes,
+            diversify,
+            canonical,
+            escalate
+        );
     }
 
     private static RolloutPlan PlanFrom(JsonElement a)

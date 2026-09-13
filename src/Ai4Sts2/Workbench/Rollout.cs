@@ -154,6 +154,27 @@ public static class Rollout
         {
             var (result, chosen) = SearchTurn(session, options, coordinate);
             nodes += result.Nodes;
+            if (
+                options.Escalate > 0
+                && options.Turns < 2
+                && result.Score < options.Escalate
+                && !CoordinateOnly(session)
+            )
+            {
+                var deeper = options with
+                {
+                    Turns = 2,
+                    Beam = Math.Max(options.Beam, 5),
+                    MaxNodes = Math.Max(options.MaxNodes, 800),
+                };
+                var (escalated, chosenDeeper) = SearchTurn(session, deeper, coordinate);
+                nodes += escalated.Nodes;
+                if (escalated.Score >= result.Score)
+                {
+                    result = escalated;
+                    chosen = chosenDeeper;
+                }
+            }
             var line = chosen.Count > 0 ? chosen : [new SearchAction("end", 0, -1, null, null)];
             if (trace is not null)
             {
@@ -188,6 +209,8 @@ public static class Rollout
         var alive = session.Run!.Players.Any(p => p.Creature.IsAlive);
         return (!CombatManager.Instance.IsInProgress && alive, turns, nodes, sw.Elapsed.TotalMicroseconds);
     }
+
+    private static bool CoordinateOnly(Session session) => session.Run is { } run && run.Players.Count > 1;
 
     public static RolloutSummary Fights(Session session, SearchOptions options, RolloutPlan plan)
     {
