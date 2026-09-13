@@ -349,16 +349,23 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         double score = 0;
         foreach (var power in creature.Powers)
         {
-            var weight = power.Id.Entry switch
+            var id = power.Id.Entry;
+            var name = id.EndsWith("_POWER", StringComparison.Ordinal) ? id[..^6] : id;
+            var (weight, cap) = name switch
             {
-                "STRENGTH" or "DEXTERITY" => 30,
-                "VULNERABLE" or "WEAK" => 20,
-                "FRAIL" => 15,
-                "POISON" => 8,
-                _ => 5,
+                "STRENGTH" or "DEXTERITY" => (30, 20),
+                "VULNERABLE" or "WEAK" => (20, 6),
+                "FRAIL" => (15, 6),
+                "POISON" => (8, 40),
+                "RITUAL" => (25, 10),
+                "ARTIFACT" => (20, 5),
+                "METALLICIZE" or "PLATED_ARMOR" => (12, 20),
+                "REGEN" => (10, 20),
+                "THORNS" => (10, 10),
+                _ => (5, 10),
             };
             var polarity = power.TypeForCurrentAmount == PowerType.Debuff ? -1 : 1;
-            score += sign * polarity * power.Amount * weight;
+            score += sign * polarity * Math.Min(Math.Abs(power.Amount), cap) * Math.Sign(power.Amount) * weight;
         }
         return score;
     }

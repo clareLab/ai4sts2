@@ -87,7 +87,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
 
     private (double Score, IReadOnlyList<TAction> Line, double Estimated) Solve(int turn, Snapshot root)
     {
-        var candidates = new List<(double Score, List<TAction> Line, bool Terminal)>();
+        var candidates = new List<(double Score, List<TAction> Line, bool Terminal, string Key)>();
         _budget = _nodes + options.MaxNodes;
         var estimated = Explore(0, [], candidates, out var best);
         _exhausted &= _nodes < _budget;
@@ -97,7 +97,12 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         }
         var score = double.NegativeInfinity;
         var line = best;
-        foreach (var (_, candidate, terminal) in candidates.OrderByDescending(c => c.Score).Take(options.Beam))
+        var distinct = candidates
+            .OrderByDescending(c => c.Score)
+            .ThenBy(c => c.Line.Count)
+            .DistinctBy(c => c.Key)
+            .Take(options.Beam);
+        foreach (var (_, candidate, terminal, _) in distinct)
         {
             RestoreSnapshot(root);
             var full = candidate.ToList();
@@ -137,7 +142,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
     private double Explore(
         int depth,
         List<TAction> path,
-        List<(double Score, List<TAction> Line, bool Terminal)> candidates,
+        List<(double Score, List<TAction> Line, bool Terminal, string Key)> candidates,
         out IReadOnlyList<TAction> bestLine
     )
     {
@@ -146,7 +151,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         {
             _leaves++;
             var terminal = domain.Evaluate();
-            candidates.Add((terminal, path.ToList(), true));
+            candidates.Add((terminal, path.ToList(), true, "terminal:" + string.Join("/", path)));
             return terminal;
         }
         var key = domain.Key();
@@ -181,7 +186,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 }
             }
         }
-        var leaf = Leaf(path, candidates, ref snap, out var closed);
+        var leaf = Leaf(path, key, candidates, ref snap, out var closed);
         snap?.Release();
         _leaves++;
         if (leaf > bestScore)
@@ -196,7 +201,8 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
 
     private double Leaf(
         List<TAction> path,
-        List<(double Score, List<TAction> Line, bool Terminal)> candidates,
+        string key,
+        List<(double Score, List<TAction> Line, bool Terminal, string Key)> candidates,
         ref Snapshot? snap,
         out List<TAction> closed
     )
@@ -222,7 +228,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             score = domain.Evaluate();
             RestoreSnapshot(snap);
         }
-        candidates.Add((score, path.ToList(), false));
+        candidates.Add((score, path.ToList(), false, key));
         return score;
     }
 
