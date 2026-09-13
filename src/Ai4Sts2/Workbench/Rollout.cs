@@ -281,8 +281,64 @@ public static class Rollout
             _ = Loader.Restore(root, session.Pump);
             root.Release();
         }
-        var best = results.OrderByDescending(r => r.Rollout.Score).First().Label;
+        var best = results.Count > 0 ? results.OrderByDescending(r => r.Rollout.Score).First().Label : "";
         return new ChoiceEvaluation(kind, results, best, sw.Elapsed.TotalMicroseconds);
+    }
+
+    public static PathEvaluation EvaluateEvent(Session session, SearchOptions options, int maxTurns)
+    {
+        var sw = Stopwatch.StartNew();
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var flow = session.Flow;
+        var view = flow.View();
+        var options0 = view.EventOptions.Where(o => !o.Locked && !o.Proceed && !o.Chosen).ToList();
+        var root = Loader.Take();
+        var results = new List<PathResult>();
+        try
+        {
+            foreach (var option in options0.Select(o => (EventOptionView?)o).Append(null))
+            {
+                string? error = null;
+                var before = Snapshot(run);
+                try
+                {
+                    if (option is { } pick)
+                    {
+                        flow.ChooseEvent(pick.Index);
+                        ResolveRoom(session, options, maxTurns);
+                    }
+                }
+                catch (Exception e) when (e is LeakedAwaitException or InvalidOperationException or ArgumentException)
+                {
+                    error = e.Message;
+                }
+                var after = Snapshot(run);
+                var alive = run.Players.All(p => p.Creature.IsAlive);
+                var label = option is { } o2 ? o2.Key : "leave";
+                var choice = new MapChoice(option?.Index ?? -1, 0, label);
+                results.Add(
+                    new PathResult(
+                        choice,
+                        view.Event,
+                        after.Hp,
+                        after.Gold,
+                        after.Deck,
+                        after.Relics,
+                        after.Potions,
+                        alive ? Score(before, after) : -100_000,
+                        error
+                    )
+                );
+                _ = Loader.Restore(root, session.Pump);
+            }
+        }
+        finally
+        {
+            _ = Loader.Restore(root, session.Pump);
+            root.Release();
+        }
+        var best = results.Count > 0 ? results.OrderByDescending(r => r.Score).First().Choice : null;
+        return new PathEvaluation(results, best, sw.Elapsed.TotalMicroseconds);
     }
 
     public static PathEvaluation EvaluatePaths(Session session, SearchOptions options, int maxTurns)

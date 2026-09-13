@@ -65,6 +65,18 @@ def handle_event(wb, a, entry):
             break
         pick = options[0]
         try:
+            ev = wb.call(
+                "wb.evalevent", {"maxTurns": a.max_turns, "maxNodes": a.max_nodes, "beam": a.beam, "turns": 1}
+            )["evaluation"]
+            entry.setdefault("eventEvaluations", []).append(ev)
+            best = ev.get("best")
+            if best is None or best["col"] < 0:
+                chosen.append("leave")
+                break
+            pick = next(o for o in options if o["index"] == best["col"])
+        except HarnessError as e:
+            entry.setdefault("eventEvaluations", []).append({"error": str(e)[:300]})
+        try:
             res = wb.call("wb.event", {"index": pick["index"]})
         except HarnessError as e:
             chosen.append(pick["key"] + " (failed)")
