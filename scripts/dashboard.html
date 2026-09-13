@@ -382,7 +382,10 @@ tr.best td { background: var(--s1-wash); }
     }
     const solveCases = solves.flatMap((r) => r.cases || []);
     const solveStats = { runs: solves.length, cases: solveCases.length, won: solveCases.filter((c) => c.outcome === "won").length, nodes: solveCases.reduce((n, c) => n + (c.nodes || 0), 0), searches: solveCases.reduce((n, c) => n + (c.searches || 0), 0), millis: solveCases.reduce((n, c) => n + (c.searchMillis || 0), 0) };
-    return { modelsRow, benches, warmups, diffs, solves, solveStats, perAction, cards, encounters, steps, mism, seeds };
+    const wholeRuns = inWindow(scoped.filter((r) => r.kind === "run"), f);
+    const runCases = wholeRuns.flatMap((r) => (r.cases || []).filter((c) => c.outcome !== "error"));
+    const runStats = { runs: wholeRuns.length, cases: runCases.length, act1: runCases.filter((c) => (c.floors || 0) >= 17 || c.outcome === "act-cleared").length, act2: runCases.filter((c) => (c.floors || 0) >= 33 || c.outcome === "act-cleared").length, act3: runCases.filter((c) => c.outcome === "act-cleared").length, floors: runCases.reduce((n, c) => n + (c.floors || 0), 0) };
+    return { modelsRow, benches, warmups, diffs, solves, solveStats, runStats, perAction, cards, encounters, steps, mism, seeds };
   }
 
   function statusPill(inst) {
@@ -549,6 +552,11 @@ tr.best td { background: var(--s1-wash); }
       tile("每回合搜索", `${fmt(S.searches ? S.millis / S.searches : null, 0)}<small>ms</small>`, "", { cls: "", text: `${fmt(S.searches ? S.nodes / S.searches : null, 0)} 节点/回合` }, "", href("/runs", f, { kind: "solve" })),
       tile("搜索总节点", fmt(S.nodes), "", { cls: "", text: `${fmt(S.millis / 1000, 1)} s` }, "", href("/runs", f, { kind: "solve" })),
     ].join("") : "";
+    const R = D.runStats;
+    const runTiles = R.cases ? [
+      tile("整局过关", `${fmt((R.act2 / R.cases) * 100, 0)}<small>% 过两幕</small>`, "", { cls: "", text: `Act1 ${R.act1} · Act2 ${R.act2} · 通关 ${R.act3} / ${R.cases} 局` }, "", href("/runs", f, { kind: "run" })),
+      tile("平均层数", fmt(R.floors / R.cases, 1), "", { cls: "", text: `${R.runs} 次运行` }, "", href("/runs", f, { kind: "run" })),
+    ].join("") : "";
     const lw = D.warmups[D.warmups.length - 1] || null;
     const curve = lw && lw.result && lw.result.millisPerRound ? lw.result.millisPerRound : null;
     const colFig = curve
@@ -559,7 +567,7 @@ tr.best td { background: var(--s1-wash); }
     return `${filterBar(route, f)}
       <section class="lead">
         <a class="hero" href="${href("/runs", f, { kind: "diff" })}"><div class="label">累计不一致</div><div class="value ${D.mism ? "bad" : ""}">${fmt(D.mism)}</div><div class="sub">工作台 vs 真实流程 · <b>${fmt(D.steps)}</b> 步差分 · <b>${D.diffs.length}</b> 次运行<br>拦截点 <b>${patches == null ? "–" : fmt(patches)}</b> / 500 门禁</div></a>
-        <div class="tiles">${tiles}${solveTiles}</div>
+        <div class="tiles">${tiles}${solveTiles}${runTiles}</div>
       </section>
       <section class="row2">
         ${figureWithTable("perf", "性能趋势", `<span class="legend"><span><i style="background:var(--s1)"></i>出牌</span><span><i style="background:var(--s2)"></i>结束回合（含敌方回合）</span><span><i style="background:var(--s3)"></i>开局</span></span><span>每次 bench 的中位 µs，对数轴 · 点一个点打开那次</span>`, logChart(D.benches, f), perfTable(D.benches))}

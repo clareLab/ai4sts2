@@ -471,7 +471,7 @@ public static class HarnessOps
         var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
         var totalNodes = a.TryGetProperty("maxTotalNodes", out var tn) ? tn.GetInt32() : 0;
         var diversify = !a.TryGetProperty("diversify", out var dv) || dv.GetBoolean();
-        var canonical = a.TryGetProperty("canonical", out var cn) && cn.GetBoolean();
+        var canonical = !a.TryGetProperty("canonical", out var cn) || cn.GetBoolean();
         return new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns, totalNodes, diversify, canonical);
     }
 
@@ -735,7 +735,7 @@ public static class HarnessOps
         var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
         var totalNodes = a.TryGetProperty("maxTotalNodes", out var tn) ? tn.GetInt32() : 0;
         var diversify = !a.TryGetProperty("diversify", out var dv) || dv.GetBoolean();
-        var canonical = a.TryGetProperty("canonical", out var cn) && cn.GetBoolean();
+        var canonical = !a.TryGetProperty("canonical", out var cn) || cn.GetBoolean();
         var options = new SearchOptions(
             maxNodes,
             maxDepth,

@@ -70,6 +70,14 @@ solve *args:
 run *args:
     python scripts/run.py {{args}}
 
+pair *args:
+    python scripts/pair.py {{args}}
+
+regress instance="wb" oracle="dev":
+    python scripts/diff.py --instance {{instance}} --oracle {{oracle}} --encounter NIBBITS_WEAK --encounter CULTISTS_NORMAL --encounter GREMLIN_MERC_NORMAL --potions FIRE_POTION,BLOCK_POTION --random 5 --steps 40 --restore-every 3 --detour 5
+    python scripts/solve.py --instance {{instance}} --encounter NIBBITS_WEAK --encounter CULTISTS_NORMAL --encounter BOWLBUGS_NORMAL --encounter SLIMES_NORMAL --encounter GREMLIN_MERC_NORMAL --encounter AEONGLASS_BOSS --seed AI4STS2,SOLVER2 --potions FIRE_POTION,BLOCK_POTION,STRENGTH_POTION --leaf estimate --beam 4
+    python scripts/run.py --instance {{instance}} --seed AI4STS2,RUN3,RUN5 --max-floors 60 --boss --fights 2
+
 monitor port="9418":
     python scripts/monitor.py --port {{port}} --open
 
