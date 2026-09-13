@@ -46,7 +46,8 @@ public sealed record RolloutPlan(
     int BossTurns,
     int HpFloor = 0,
     bool Elite = false,
-    int EliteTurns = 8
+    int EliteTurns = 8,
+    int Salt = 0
 );
 
 public sealed record RewardOptionResult(string Label, int? Card, string? Alternative, RolloutSummary Rollout);
@@ -357,12 +358,15 @@ public static class Rollout
     [ThreadStatic]
     private static int _fightOrdinal;
 
+    [ThreadStatic]
+    private static int _salt;
+
     public static Action<List<CardModel>>? StableOrder => _rank is null || !Tuning.StableShuffle ? null : Reorder;
 
     private static void Reorder(List<CardModel> cards)
     {
         var rank = _rank!;
-        var salt = (uint)(_fightOrdinal + 1) * 0x85EBCA6Bu;
+        var salt = (uint)(_fightOrdinal + 1 + (1_000 * _salt)) * 0x85EBCA6Bu;
         var keyed = new (uint Key, int Tie, CardModel Card)[cards.Count];
         for (var i = 0; i < cards.Count; i++)
         {
@@ -403,6 +407,7 @@ public static class Rollout
         var lost = 0;
         var fights = plan.Fights;
         var maxTurns = plan.MaxTurns;
+        _salt = plan.Salt;
         foreach (var creature in run.Players.Select(p => p.Creature))
         {
             var floor = creature.MaxHp * plan.HpFloor / 100;

@@ -82,23 +82,27 @@ public static class RunSetup
         }
         foreach (var spec in specs)
         {
-            var plus = spec.IndexOf('+', StringComparison.Ordinal);
-            var id = plus < 0 ? spec : spec[..plus];
-            var upgrades =
-                plus < 0
-                    ? 0
-                    : (spec.Length == plus + 1 ? 1 : int.Parse(spec[(plus + 1)..], CultureInfo.InvariantCulture));
-            var canonical = ModelDb.GetById<CardModel>(
-                new ModelId(ModelId.SlugifyCategory<CardModel>(), id.ToUpperInvariant())
-            );
-            var card = run.CreateCard(canonical, player);
-            for (var u = 0; u < upgrades; u++)
-            {
-                card.UpgradeInternal();
-                card.FinalizeUpgradeInternal();
-            }
-            _ = await CardPileCmd.Add(card, PileType.Deck);
+            await AddCardAsync(player, spec);
         }
+    }
+
+    public static async Task AddCardAsync(Player player, string spec)
+    {
+        var run = (RunState)player.RunState;
+        var plus = spec.IndexOf('+', StringComparison.Ordinal);
+        var id = plus < 0 ? spec : spec[..plus];
+        var upgrades =
+            plus < 0 ? 0 : (spec.Length == plus + 1 ? 1 : int.Parse(spec[(plus + 1)..], CultureInfo.InvariantCulture));
+        var canonical = ModelDb.GetById<CardModel>(
+            new ModelId(ModelId.SlugifyCategory<CardModel>(), id.ToUpperInvariant())
+        );
+        var card = run.CreateCard(canonical, player);
+        for (var u = 0; u < upgrades; u++)
+        {
+            card.UpgradeInternal();
+            card.FinalizeUpgradeInternal();
+        }
+        _ = await CardPileCmd.Add(card, PileType.Deck);
     }
 
     private static RunPlayerDump CapturePlayer(Player player)

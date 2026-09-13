@@ -97,6 +97,7 @@ public static class HarnessOps
             "wb.evalsmith" => Result(WorkbenchEvalSmith(request.Args)),
             "wb.evalrest" => Result(WorkbenchEvalRest(request.Args)),
             "wb.evalrelic" => Result(WorkbenchEvalRelic(request.Args)),
+            "wb.evaladd" => Result(WorkbenchEvalAdd(request.Args)),
             "wb.evalpath" => Result(WorkbenchEvalPath(request.Args)),
             "wb.evalevent" => Result(WorkbenchEvalEvent(request.Args)),
             "wb.evalshop" => Result(WorkbenchEvalShop(request.Args)),
@@ -553,6 +554,7 @@ public static class HarnessOps
         var bossTurns = a.TryGetProperty("bossTurns", out var bt) ? bt.GetInt32() : 6;
         var elite = a.TryGetProperty("elite", out var e) ? e.GetBoolean() : Tuning.EliteProbe;
         var eliteTurns = a.TryGetProperty("eliteTurns", out var et) ? et.GetInt32() : 8;
+        var salt = a.TryGetProperty("salt", out var sa) ? sa.GetInt32() : 0;
         return new RolloutPlan(
             fights,
             maxTurns,
@@ -560,7 +562,8 @@ public static class HarnessOps
             bossTurns,
             deckChoice ? Tuning.RolloutHpFloor : 0,
             deckChoice && elite,
-            eliteTurns
+            eliteTurns,
+            salt
         );
     }
 
@@ -629,6 +632,29 @@ public static class HarnessOps
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var evaluation = Rollout.EvaluateEvent(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchEvalAdd(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var session = Session.Instance;
+        var run = session.Run ?? throw new InvalidOperationException("run not set up");
+        var player = run.Players[PlayerOf(a)];
+        var choices = new List<(string Label, int? Index, Action Apply)> { ("Skip", null, new Action(() => { })) };
+        var specs = a.GetProperty("cards").EnumerateArray().Select(c => c.GetString()!).ToList();
+        for (var i = 0; i < specs.Count; i++)
+        {
+            var spec = specs[i];
+            choices.Add(
+                (
+                    spec,
+                    i,
+                    new Action(() => session.Pump.Drive(() => RunSetup.AddCardAsync(player, spec), $"add {spec}"))
+                )
+            );
+        }
+        var evaluation = Rollout.EvaluateChoices(session, "add", choices, SearchOptionsFrom(a), PlanFrom(a, true));
+        return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
     private static object WorkbenchEvalRelic(JsonElement? args)
