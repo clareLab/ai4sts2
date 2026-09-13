@@ -73,6 +73,18 @@ run *args:
 pair *args:
     python scripts/pair.py {{args}}
 
+fleet *args:
+    python scripts/fleet.py {{args}}
+
+stats *args:
+    python scripts/stats.py {{args}}
+
+ladder instance="wb" oracle="dev" tag="ladder":
+    python scripts/diff.py --instance {{instance}} --oracle {{oracle}} --encounter NIBBITS_WEAK --encounter CULTISTS_NORMAL --potions FIRE_POTION,BLOCK_POTION --random 3 --steps 30 --restore-every 3 --detour 5
+    python scripts/pair.py --instance {{instance}} --encounter CULTISTS_NORMAL --encounter BOWLBUGS_NORMAL --encounter THE_KIN_BOSS --seed AI4STS2,PAIR2,PAIR3
+    python scripts/bosslab.py --instance {{instance}} --runs "metrics/runs/2026091[0-3]-1[0-8]*-run-*.json" --config "turns=3,beam=5,maxNodes=2500"
+    python scripts/fleet.py --instances {{instance}} --seeds B1-B4 --tag {{tag}}
+
 regress instance="wb" oracle="dev":
     python scripts/diff.py --instance {{instance}} --oracle {{oracle}} --encounter NIBBITS_WEAK --encounter CULTISTS_NORMAL --encounter GREMLIN_MERC_NORMAL --potions FIRE_POTION,BLOCK_POTION --random 5 --steps 40 --restore-every 3 --detour 5
     python scripts/solve.py --instance {{instance}} --encounter NIBBITS_WEAK --encounter CULTISTS_NORMAL --encounter BOWLBUGS_NORMAL --encounter SLIMES_NORMAL --encounter GREMLIN_MERC_NORMAL --encounter AEONGLASS_BOSS --seed AI4STS2,SOLVER2 --potions FIRE_POTION,BLOCK_POTION,STRENGTH_POTION --leaf estimate --beam 4

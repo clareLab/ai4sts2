@@ -502,6 +502,7 @@ def main():
     ap.add_argument("--paths", action="store_true")
     ap.add_argument("--boss", action="store_true")
     ap.add_argument("--boss-turns", type=int, default=6)
+    ap.add_argument("--tag", default="")
     a = ap.parse_args()
     party = a.players > 1
     defaults = {
@@ -540,6 +541,7 @@ def main():
             "character": a.character,
             "players": a.players,
             "net": a.net,
+            "tag": a.tag,
             "seeds": seeds,
             "maxNodes": a.max_nodes,
             "maxDepth": a.max_depth,
