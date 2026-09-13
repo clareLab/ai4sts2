@@ -345,7 +345,7 @@ def play_run(wb, a, seed):
             "pathEvaluation": path_eval,
         }
         alive = True
-        if v["inCombat"] and choice["type"] in ("Boss", "Elite"):
+        if v["inCombat"]:
             entry["party"] = [
                 {k: p[k] for k in ("character", "hp", "maxHp", "gold", "deck", "relics", "potions")}
                 for p in state["players"]
