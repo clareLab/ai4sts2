@@ -510,7 +510,8 @@ def main():
     ap.add_argument("--players", type=int, default=1)
     ap.add_argument("--seed", default="AI4STS2")
     ap.add_argument("--max-floors", type=int, default=20)
-    ap.add_argument("--max-nodes", type=int, default=600)
+    ap.add_argument("--max-nodes", type=int, default=400)
+    ap.add_argument("--record", action="store_true")
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=30)
     ap.add_argument("--beam", type=int, default=None)
@@ -536,8 +537,8 @@ def main():
     a = ap.parse_args()
     party = a.players > 1
     defaults = {
-        "beam": 3 if party else 4,
-        "turns": 2 if party else 1,
+        "beam": 3,
+        "turns": 2,
         "boss_nodes": 1500 if party else 2500,
         "boss_beam": 4 if party else 5,
         "boss_turns_search": 2 if party else 3,
@@ -549,6 +550,7 @@ def main():
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
     wb = Harness(a.instance, timeout=3600)
     ping = wb.call("ping")
+    wb.call("wb.tune", {"reset": True, "Record": a.record})
     t0 = time.time()
     cases = []
     traces = []
