@@ -2,7 +2,18 @@ using System.Diagnostics;
 
 namespace Ai4Sts2.Workbench;
 
-public sealed record SearchOptions(int MaxNodes, int MaxDepth, bool Estimate, int Beam, int Turns);
+public sealed record SearchOptions(
+    int MaxNodes,
+    int MaxDepth,
+    bool Estimate,
+    int Beam,
+    int Turns,
+    int MaxTotalNodes = 0,
+    bool Diversify = true
+)
+{
+    public int TotalBudget => MaxTotalNodes > 0 ? MaxTotalNodes : MaxNodes * 4;
+}
 
 public interface ISearchDomain<TAction>
 {
@@ -11,6 +22,10 @@ public interface ISearchDomain<TAction>
     public bool Terminal { get; }
 
     public string Key();
+
+    public string BeamKey();
+
+    public string Bucket();
 
     public IReadOnlyList<TAction> Actions();
 
@@ -22,6 +37,15 @@ public interface ISearchDomain<TAction>
 
     public double Estimate();
 }
+
+public sealed record BeamEntry<TAction>(
+    IReadOnlyList<TAction> Line,
+    double Estimate,
+    double Real1,
+    double Real,
+    string Bucket,
+    bool Duplicate
+);
 
 public sealed record SearchResult<TAction>(
     double Score,
@@ -35,6 +59,10 @@ public sealed record SearchResult<TAction>(
     int Snapshots,
     int Restores,
     int Verified,
+    int Candidates,
+    int Distinct,
+    int Duplicates,
+    IReadOnlyList<BeamEntry<TAction>> Beam,
     double Micros,
     double SnapMicros,
     double RestoreMicros,
@@ -44,25 +72,33 @@ public sealed record SearchResult<TAction>(
 
 public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions options)
 {
-    private readonly Dictionary<string, double> _table = [];
+    private readonly Dictionary<string, double> _solved = [];
     private readonly Stopwatch _clock = new();
+    private Dictionary<string, double> _table = [];
     private int _nodes;
     private int _budget;
+    private int _totalBudget;
     private bool _exhausted = true;
     private int _leaves;
     private int _transpositions;
     private int _snapshots;
     private int _restores;
     private int _verified;
+    private int _candidates;
+    private int _distinct;
+    private int _duplicates;
     private double _snapMicros;
     private double _restoreMicros;
     private double _actMicros;
 
+    private sealed record Candidate(double Score, List<TAction> Line, bool Terminal, string BeamKey, string Bucket);
+
     public SearchResult<TAction> Run()
     {
         _clock.Restart();
+        _totalBudget = options.TotalBudget;
         var root = TakeSnapshot();
-        var (score, line, estimated) = Solve(1, root);
+        var (score, line, estimated, beam) = Solve(1, root);
         RestoreSnapshot(root);
         root.Release();
         return new SearchResult<TAction>(
@@ -77,6 +113,10 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             _snapshots,
             _restores,
             _verified,
+            _candidates,
+            _distinct,
+            _duplicates,
+            beam,
             _clock.Elapsed.TotalMicroseconds,
             _snapMicros,
             _restoreMicros,
@@ -85,64 +125,116 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         );
     }
 
-    private (double Score, IReadOnlyList<TAction> Line, double Estimated) Solve(int turn, Snapshot root)
+    private (double Score, IReadOnlyList<TAction> Line, double Estimated, IReadOnlyList<BeamEntry<TAction>> Beam) Solve(
+        int turn,
+        Snapshot root
+    )
     {
-        var candidates = new List<(double Score, List<TAction> Line, bool Terminal, string Key)>();
-        _budget = _nodes + options.MaxNodes;
-        var estimated = Explore(0, [], candidates, out var best);
-        _exhausted &= _nodes < _budget;
-        if ((!options.Estimate && turn == options.Turns) || options.Beam <= 0 || candidates.Count == 0)
+        var saved = _table;
+        _table = [];
+        try
         {
-            return (estimated, best, estimated);
-        }
-        var score = double.NegativeInfinity;
-        var line = best;
-        var distinct = candidates
-            .OrderByDescending(c => c.Score)
-            .ThenBy(c => c.Line.Count)
-            .DistinctBy(c => c.Key)
-            .Take(options.Beam);
-        foreach (var (_, candidate, terminal, _) in distinct)
-        {
-            RestoreSnapshot(root);
-            var full = candidate.ToList();
-            foreach (var action in candidate)
+            var candidates = new List<Candidate>();
+            _budget = _nodes + options.MaxNodes;
+            var estimated = Explore(0, [], candidates, out var best);
+            _exhausted &= _nodes < _budget && _nodes < _totalBudget;
+            if (turn == 1)
             {
-                Apply(action);
+                _candidates = candidates.Count;
             }
-            if (!terminal)
+            if ((!options.Estimate && turn == options.Turns) || options.Beam <= 0 || candidates.Count == 0)
             {
-                foreach (var action in domain.Closing())
+                return (estimated, best, estimated, []);
+            }
+            var ordered = candidates
+                .OrderByDescending(c => c.Score)
+                .ThenBy(c => c.Line.Count)
+                .DistinctBy(c => c.BeamKey)
+                .ToList();
+            if (turn == 1)
+            {
+                _distinct = ordered.Count;
+            }
+            var beam = ordered.Take(options.Beam).ToList();
+            if (options.Diversify)
+            {
+                var buckets = beam.Select(c => c.Bucket).ToHashSet();
+                foreach (var c in ordered.Skip(options.Beam))
                 {
-                    Apply(action);
-                    full.Add(action);
+                    if (beam.Count >= 2 * options.Beam)
+                    {
+                        break;
+                    }
+                    if (buckets.Add(c.Bucket))
+                    {
+                        beam.Add(c);
+                    }
                 }
             }
-            double real;
-            if (domain.Terminal || turn >= options.Turns)
+            var entries = new List<BeamEntry<TAction>>();
+            var bestScore = double.NegativeInfinity;
+            var bestReal1 = double.NegativeInfinity;
+            var line = best;
+            foreach (var candidate in beam)
             {
-                real = domain.Evaluate();
+                RestoreSnapshot(root);
+                var full = candidate.Line.ToList();
+                foreach (var action in candidate.Line)
+                {
+                    Apply(action);
+                }
+                if (!candidate.Terminal)
+                {
+                    foreach (var action in domain.Closing())
+                    {
+                        Apply(action);
+                        full.Add(action);
+                    }
+                }
+                var postKey = domain.Terminal ? "terminal:" + string.Join("/", full) : domain.Key();
+                var real1 = domain.Evaluate();
+                double real;
+                var duplicate = _solved.TryGetValue(postKey, out var known);
+                if (duplicate)
+                {
+                    real = known;
+                    _duplicates++;
+                }
+                else
+                {
+                    if (domain.Terminal || turn >= options.Turns)
+                    {
+                        real = real1;
+                    }
+                    else
+                    {
+                        var next = TakeSnapshot();
+                        real = Solve(turn + 1, next).Score;
+                        next.Release();
+                    }
+                    _solved[postKey] = real;
+                    _verified++;
+                }
+                entries.Add(new BeamEntry<TAction>(full, candidate.Score, real1, real, candidate.Bucket, duplicate));
+                if (real > bestScore || (real == bestScore && real1 > bestReal1))
+                {
+                    bestScore = real;
+                    bestReal1 = real1;
+                    line = full;
+                }
             }
-            else
-            {
-                var next = TakeSnapshot();
-                real = Solve(turn + 1, next).Score;
-                next.Release();
-            }
-            _verified++;
-            if (real > score)
-            {
-                score = real;
-                line = full;
-            }
+            return (bestScore, line, estimated, entries);
         }
-        return (score, line, estimated);
+        finally
+        {
+            _table = saved;
+        }
     }
 
     private double Explore(
         int depth,
         List<TAction> path,
-        List<(double Score, List<TAction> Line, bool Terminal, string Key)> candidates,
+        List<Candidate> candidates,
         out IReadOnlyList<TAction> bestLine
     )
     {
@@ -151,7 +243,9 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         {
             _leaves++;
             var terminal = domain.Evaluate();
-            candidates.Add((terminal, path.ToList(), true, "terminal:" + string.Join("/", path)));
+            candidates.Add(
+                new Candidate(terminal, path.ToList(), true, "terminal:" + string.Join("/", path), "terminal")
+            );
             return terminal;
         }
         var key = domain.Key();
@@ -161,7 +255,8 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             return known;
         }
         _nodes++;
-        var actions = depth < options.MaxDepth && _nodes < _budget ? domain.Actions() : [];
+        var open = _nodes < _budget && _nodes < _totalBudget;
+        var actions = depth < options.MaxDepth && open ? domain.Actions() : [];
         var bestScore = double.NegativeInfinity;
         var best = bestLine;
         Snapshot? snap = null;
@@ -170,7 +265,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             snap = TakeSnapshot();
             foreach (var action in actions)
             {
-                if (_nodes >= _budget)
+                if (_nodes >= _budget || _nodes >= _totalBudget)
                 {
                     break;
                 }
@@ -186,7 +281,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 }
             }
         }
-        var leaf = Leaf(path, key, candidates, ref snap, out var closed);
+        var leaf = Leaf(path, candidates, ref snap, out var closed);
         snap?.Release();
         _leaves++;
         if (leaf > bestScore)
@@ -199,13 +294,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         return bestScore;
     }
 
-    private double Leaf(
-        List<TAction> path,
-        string key,
-        List<(double Score, List<TAction> Line, bool Terminal, string Key)> candidates,
-        ref Snapshot? snap,
-        out List<TAction> closed
-    )
+    private double Leaf(List<TAction> path, List<Candidate> candidates, ref Snapshot? snap, out List<TAction> closed)
     {
         var closing = domain.Closing();
         closed = path.Concat(closing).ToList();
@@ -228,7 +317,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
             score = domain.Evaluate();
             RestoreSnapshot(snap);
         }
-        candidates.Add((score, path.ToList(), false, key));
+        candidates.Add(new Candidate(score, path.ToList(), false, domain.BeamKey(), domain.Bucket()));
         return score;
     }
 

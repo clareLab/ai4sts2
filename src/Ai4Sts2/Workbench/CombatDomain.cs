@@ -1,4 +1,5 @@
 using System.Text;
+using Ai4Sts2.Core;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
@@ -246,7 +247,30 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return score;
     }
 
-    public string Key()
+    public string Key() => Key(false);
+
+    public string BeamKey() => Key(true);
+
+    public string Bucket()
+    {
+        var state = State();
+        var sb = new StringBuilder(128);
+        foreach (var enemy in state.Enemies)
+        {
+            sb.Append(enemy.CombatId)
+                .Append(enemy.IsAlive ? '+' : '-')
+                .Append(enemy.Monster?.NextMove?.StateId)
+                .Append('[');
+            foreach (var power in enemy.Powers.Select(p => p.Id.Entry).Order())
+            {
+                sb.Append(power).Append(',');
+            }
+            sb.Append(']');
+        }
+        return sb.ToString();
+    }
+
+    private static string Key(bool canonical)
     {
         var state = State();
         var sb = new StringBuilder(512);
@@ -275,9 +299,9 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 .Append('|');
             Pile(sb, pcs.Hand, true);
             Pile(sb, pcs.DrawPile, false);
-            Pile(sb, pcs.DiscardPile, false);
-            Pile(sb, pcs.ExhaustPile, false);
-            Pile(sb, pcs.PlayPile, false);
+            Pile(sb, pcs.DiscardPile, canonical);
+            Pile(sb, pcs.ExhaustPile, canonical);
+            Pile(sb, pcs.PlayPile, canonical);
             foreach (var orb in pcs.OrbQueue.Orbs)
             {
                 sb.Append(orb.Id.Entry).Append(',');
@@ -349,21 +373,11 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         double score = 0;
         foreach (var power in creature.Powers)
         {
-            var id = power.Id.Entry;
-            var name = id.EndsWith("_POWER", StringComparison.Ordinal) ? id[..^6] : id;
-            var (weight, cap) = name switch
+            var (weight, cap) = PowerWeights.For(power.Id.Entry, sign < 0);
+            if (weight == 0)
             {
-                "STRENGTH" or "DEXTERITY" => (30, 20),
-                "VULNERABLE" or "WEAK" => (20, 6),
-                "FRAIL" => (15, 6),
-                "POISON" => (8, 40),
-                "RITUAL" => (25, 10),
-                "ARTIFACT" => (20, 5),
-                "METALLICIZE" or "PLATED_ARMOR" => (12, 20),
-                "REGEN" => (10, 20),
-                "THORNS" => (10, 10),
-                _ => (5, 10),
-            };
+                continue;
+            }
             var polarity = power.TypeForCurrentAmount == PowerType.Debuff ? -1 : 1;
             score += sign * polarity * Math.Min(Math.Abs(power.Amount), cap) * Math.Sign(power.Amount) * weight;
         }

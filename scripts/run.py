@@ -63,7 +63,13 @@ def handle_event(wb, a, entry):
         if not options:
             break
         pick = options[0]
-        res = wb.call("wb.event", {"index": pick["index"]})
+        try:
+            res = wb.call("wb.event", {"index": pick["index"]})
+        except HarnessError as e:
+            chosen.append(pick["key"] + " (failed)")
+            entry["event"] = {"id": v["event"], "chosen": chosen, "error": str(e)[:300]}
+            print(f"    event {v['event']} option {pick['key']} failed: {str(e)[:120]}")
+            return True
         chosen.append(pick["key"])
         if res["view"]["inCombat"]:
             auto = autoplay(wb, a)

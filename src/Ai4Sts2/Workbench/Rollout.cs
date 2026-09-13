@@ -91,7 +91,28 @@ public static class Rollout
         root.Release();
         line.AddRange(domain.Closing());
         var summary = last is null
-            ? new SearchResult<SearchAction>(0, 0, line, "coordinate", 1, nodes, 0, 0, 0, 0, 0, micros, 0, 0, 0, true)
+            ? new SearchResult<SearchAction>(
+                0,
+                0,
+                line,
+                "coordinate",
+                1,
+                nodes,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                [],
+                micros,
+                0,
+                0,
+                0,
+                true
+            )
             : last with
             {
                 Line = line,

@@ -469,7 +469,9 @@ public static class HarnessOps
         var leaf = a.TryGetProperty("leaf", out var l) ? l.GetString() ?? "estimate" : "estimate";
         var beam = a.TryGetProperty("beam", out var b) ? b.GetInt32() : 3;
         var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
-        return new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns);
+        var totalNodes = a.TryGetProperty("maxTotalNodes", out var tn) ? tn.GetInt32() : 0;
+        var diversify = !a.TryGetProperty("diversify", out var dv) || dv.GetBoolean();
+        return new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns, totalNodes, diversify);
     }
 
     private static RolloutPlan PlanFrom(JsonElement a)
@@ -730,7 +732,9 @@ public static class HarnessOps
         var leaf = a.TryGetProperty("leaf", out var l) ? l.GetString() ?? "exact" : "exact";
         var beam = a.TryGetProperty("beam", out var b) ? b.GetInt32() : 3;
         var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
-        var options = new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns);
+        var totalNodes = a.TryGetProperty("maxTotalNodes", out var tn) ? tn.GetInt32() : 0;
+        var diversify = !a.TryGetProperty("diversify", out var dv) || dv.GetBoolean();
+        var options = new SearchOptions(maxNodes, maxDepth, leaf == "estimate", beam, turns, totalNodes, diversify);
         var coordinate = a.TryGetProperty("coordinate", out var c) && c.GetBoolean();
         var (result, _) = Rollout.SearchTurn(Session.Instance, options, coordinate);
         return new { Result = result, State = CombatDump.Capture() };

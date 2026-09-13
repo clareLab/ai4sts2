@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Map;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Rewards;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -162,6 +163,25 @@ public sealed class RunFlow(Session session)
         }
         var sync = RunManager.Instance.EventSynchronizer;
         session.DropSnapshots();
+        try
+        {
+            ChooseEventInternal(run, sync, index);
+        }
+        catch (LeakedAwaitException e)
+        {
+            sync._pendingOptionTasks.Clear();
+            throw new LeakedAwaitException(
+                $"event {room.CanonicalEvent.Id.Entry} option {option.TextKey}: {e.Message}"
+            );
+        }
+        if (CombatManager.Instance.IsInProgress)
+        {
+            session.RequirePlayable(-1, "event combat");
+        }
+    }
+
+    private void ChooseEventInternal(RunState run, EventSynchronizer sync, int index)
+    {
         if (sync.IsShared)
         {
             session.Pump.Drive(
@@ -208,10 +228,6 @@ public sealed class RunFlow(Session session)
                     $"event option {pick} for {other.NetId}"
                 );
             }
-        }
-        if (CombatManager.Instance.IsInProgress)
-        {
-            session.RequirePlayable(-1, "event combat");
         }
     }
 
