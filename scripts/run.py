@@ -128,9 +128,20 @@ def handle_event(wb, a, entry):
             entry.setdefault("eventEvaluations", []).append(ev)
             best = ev.get("best")
             if best is None or best["col"] < 0:
-                chosen.append("leave")
-                break
-            pick = next(o for o in options if o["index"] == best["col"])
+                exits = [o for o in v["eventOptions"] if o["proceed"] and not o["locked"] and not o["chosen"]]
+                if exits:
+                    pick = exits[0]
+                else:
+                    scored = [o for o in ev["options"] if o["choice"]["col"] >= 0 and not o.get("error")] or [
+                        o for o in ev["options"] if o["choice"]["col"] >= 0
+                    ]
+                    if not scored:
+                        chosen.append("leave")
+                        break
+                    top = max(scored, key=lambda o: o["score"])
+                    pick = next(o for o in options if o["index"] == top["choice"]["col"])
+            else:
+                pick = next(o for o in options if o["index"] == best["col"])
         except StopIteration:
             pass
         except HarnessError as e:
@@ -361,6 +372,14 @@ def play_run(wb, a, seed):
             if not alive:
                 outcome = "died"
                 break
+            after = wb.call("wb.view")["view"]
+            if after["room"] == "EventRoom" and after["event"] == view["event"] and not after["eventFinished"]:
+                stuck = [o for o in after["eventOptions"] if not o["locked"] and not o["chosen"]]
+                if stuck:
+                    try:
+                        wb.call("wb.event", {"index": stuck[0]["index"]})
+                    except HarnessError as e:
+                        print(f"    event {after['event']} could not be finished: {str(e)[:120]}")
             continue
         weak = weakest(state["players"])
         choice, route_scores = (
