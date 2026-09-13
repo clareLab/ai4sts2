@@ -33,6 +33,8 @@ public static class Tuning
 
     public static int FocusFire { get; set; } = 7;
 
+    public static int RaceWeight { get; set; } = 25;
+
     public static int LevelDivisor { get; set; } = 5;
 
     public static int TotalFactor { get; set; } = 8;

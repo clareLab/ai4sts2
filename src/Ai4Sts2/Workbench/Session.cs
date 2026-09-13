@@ -21,6 +21,25 @@ using MegaCrit.Sts2.Core.Unlocks;
 
 namespace Ai4Sts2.Workbench;
 
+public sealed class FightStats
+{
+    public int Turns { get; set; }
+
+    public int Dealt { get; set; }
+
+    public int Block { get; set; }
+
+    public int HpLost { get; set; }
+
+    public void Reset()
+    {
+        Turns = 0;
+        Dealt = 0;
+        Block = 0;
+        HpLost = 0;
+    }
+}
+
 public sealed class Session
 {
     private const ulong LocalNetId = 1;
@@ -32,6 +51,8 @@ public sealed class Session
     public ScriptSelector Selector { get; } = new();
 
     public Dictionary<string, int> CardPlays { get; } = [];
+
+    public FightStats Fight { get; } = new();
 
     public RunState? Run { get; private set; }
 
@@ -157,6 +178,7 @@ public sealed class Session
     {
         var run = Run ?? throw new InvalidOperationException("run not set up");
         _snaps.Clear();
+        Fight.Reset();
         if (fullHeal)
         {
             foreach (var player in run.Players)

@@ -28,6 +28,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private readonly int _blockPotionValue;
     private readonly Dictionary<string, (int[] Self, int[] Plating)> _probes = [];
     private readonly bool _probe;
+    private readonly double _damagePerTurn;
+    private readonly double _blockPerTurn;
     private bool _atTurnStart;
 
     private sealed record Threat(int[] Damage, double PerTurn, double HitsPerTurn, int MaxHit, int Moves);
@@ -59,6 +61,56 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             _blockPotionValue = Math.Max(_potionValue, HpWeight * Math.Min(12, spike - Tuning.BlockPrior));
         }
         _probe = probe && Tuning.ProbeTurnEnd;
+        var prior = 8.0 * (state.Players.Count > 0 ? state.Players[0].PlayerCombatState?.MaxEnergy ?? 3 : 3);
+        var fight = Session.Fight;
+        _damagePerTurn = fight.Turns > 0 ? Math.Max(prior * 0.5, (double)fight.Dealt / fight.Turns) : prior;
+        _blockPerTurn = fight.Turns > 0 ? (double)fight.Block / fight.Turns : Tuning.BlockPrior;
+    }
+
+    private double Race(CombatState state)
+    {
+        var streams = new List<(double Rate, int Hp, int[] Chain)>();
+        var seat = state.Players.Count > 0 ? state.Players[Math.Min(ActivePlayer ?? 0, state.Players.Count - 1)] : null;
+        if (seat is null)
+        {
+            return 0;
+        }
+        foreach (var enemy in state.Enemies)
+        {
+            if (!enemy.IsAlive || enemy.Monster is null || enemy.MaxHp >= 1_000_000)
+            {
+                continue;
+            }
+            var threat = ThreatOf(enemy, state, seat);
+            streams.Add((threat.PerTurn, enemy.CurrentHp + enemy.Block, threat.Damage));
+        }
+        if (streams.Count == 0)
+        {
+            return 0;
+        }
+        double time = 0;
+        double incoming = 0;
+        foreach (var (Rate, Hp, Chain) in streams.OrderByDescending(s => s.Rate / Math.Max(1, s.Hp)))
+        {
+            time += Hp / _damagePerTurn;
+            for (var i = 0; i < time; i++)
+            {
+                var hit = i < Chain.Length ? Chain[i] : Rate;
+                incoming += hit * Math.Min(1, time - i);
+            }
+        }
+        double penalty = 0;
+        foreach (var player in state.Players)
+        {
+            var creature = player.Creature;
+            if (!creature.IsAlive)
+            {
+                continue;
+            }
+            var deficit = incoming - (creature.CurrentHp - 1) - (_blockPerTurn * time);
+            penalty -= Tuning.RaceWeight * Math.Max(0, deficit);
+        }
+        return penalty;
     }
 
     private static string DebuffSignature(CombatState state)
@@ -571,6 +623,10 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         {
             score -= Tuning.FocusFire * weakest;
         }
+        if (Tuning.RaceWeight > 0)
+        {
+            score += Race(state);
+        }
         foreach (var player in players)
         {
             var creature = player.Creature;
@@ -682,7 +738,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return score;
     }
 
-    private static int Dealt(CombatState state)
+    public static int Dealt(CombatState state)
     {
         var total = 0;
         foreach (var enemy in state.Enemies)

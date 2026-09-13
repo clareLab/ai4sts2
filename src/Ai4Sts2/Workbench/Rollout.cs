@@ -280,6 +280,9 @@ public static class Rollout
                 );
             }
             var replay = new CombatDomain(session, false);
+            var (live, _) = Session.Current(0);
+            var dealtBefore = CombatDomain.Dealt(live);
+            var hpBefore = live.Players.Sum(p => p.Creature.CurrentHp);
             foreach (var action in line)
             {
                 if (!CombatManager.Instance.IsInProgress)
@@ -290,8 +293,15 @@ public static class Rollout
                 {
                     session.CardPlays[played] = session.CardPlays.GetValueOrDefault(played) + 1;
                 }
+                if (action.Kind == "end")
+                {
+                    session.Fight.Block += live.Players.Sum(p => p.Creature.Block);
+                }
                 _ = replay.Apply(action);
             }
+            session.Fight.Turns++;
+            session.Fight.Dealt += Math.Max(0, CombatDomain.Dealt(live) - dealtBefore);
+            session.Fight.HpLost += Math.Max(0, hpBefore - live.Players.Sum(p => p.Creature.CurrentHp));
             turns++;
         }
         var alive = session.Run!.Players.Any(p => p.Creature.IsAlive);
