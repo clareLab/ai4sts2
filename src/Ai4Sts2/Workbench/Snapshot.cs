@@ -1,16 +1,10 @@
 using System.Diagnostics;
-using System.Reflection;
 
 namespace Ai4Sts2.Workbench;
 
 public sealed class Snapshot
 {
-    private const BindingFlags Declared =
-        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-
-    private static readonly Dictionary<Type, FieldInfo[]> _fieldCache = [];
-
-    private readonly List<(object Target, FieldInfo[] Fields, object?[] Values)> _objects = [];
+    private readonly List<(object Target, Copier Copier, object?[] Values)> _objects = [];
     private readonly List<(Array Target, Array Copy)> _arrays = [];
 
     public int Objects => _objects.Count;
@@ -40,7 +34,21 @@ public sealed class Snapshot
             if (obj is Array array)
             {
                 snap._arrays.Add((array, (Array)array.Clone()));
-                if (!array.GetType().GetElementType()!.IsPrimitive)
+                var element = array.GetType().GetElementType()!;
+                if (element.IsPrimitive || element.IsEnum)
+                {
+                    continue;
+                }
+                if (element.IsValueType)
+                {
+                    var copier = Copier.For(element);
+                    var buffer = new object?[copier.Fields.Length];
+                    foreach (var item in array)
+                    {
+                        Walk(item, copier, buffer, seen, stack);
+                    }
+                }
+                else
                 {
                     foreach (var item in array)
                     {
@@ -49,16 +57,15 @@ public sealed class Snapshot
                 }
                 continue;
             }
-            var fields = FieldsOf(obj.GetType());
-            var values = new object?[fields.Length];
-            for (var i = 0; i < fields.Length; i++)
+            var c = Copier.For(obj.GetType());
+            var values = new object?[c.Fields.Length];
+            c.Capture(obj, values);
+            foreach (var value in values)
             {
-                var value = fields[i].GetValue(obj);
-                values[i] = value;
                 Consider(value, seen, stack);
             }
-            snap._objects.Add((obj, fields, values));
-            snap.Fields += fields.Length;
+            snap._objects.Add((obj, c, values));
+            snap.Fields += values.Length;
         }
         snap.Elapsed = sw.Elapsed;
         return snap;
@@ -71,16 +78,9 @@ public sealed class Snapshot
         {
             Array.Copy(copy, target, copy.Length);
         }
-        foreach (var (target, fields, values) in _objects)
+        foreach (var (target, copier, values) in _objects)
         {
-            for (var i = 0; i < fields.Length; i++)
-            {
-                if (Skip(fields[i].FieldType))
-                {
-                    continue;
-                }
-                fields[i].SetValue(target, values[i]);
-            }
+            copier.Restore!(target, values);
         }
         return sw.Elapsed;
     }
@@ -97,6 +97,15 @@ public sealed class Snapshot
             || typeof(Godot.GodotObject).IsAssignableFrom(t);
     }
 
+    private static void Walk(object boxed, Copier copier, object?[] buffer, HashSet<object> seen, Stack<object> stack)
+    {
+        copier.Capture(boxed, buffer);
+        foreach (var value in buffer)
+        {
+            Consider(value, seen, stack);
+        }
+    }
+
     private static void Consider(object? value, HashSet<object> seen, Stack<object> stack)
     {
         if (value is null)
@@ -110,34 +119,13 @@ public sealed class Snapshot
         }
         if (t.IsValueType)
         {
-            foreach (var field in FieldsOf(t))
-            {
-                Consider(field.GetValue(value), seen, stack);
-            }
+            var copier = Copier.For(t);
+            Walk(value, copier, new object?[copier.Fields.Length], seen, stack);
             return;
         }
         if (seen.Add(value))
         {
             stack.Push(value);
-        }
-    }
-
-    private static FieldInfo[] FieldsOf(Type type)
-    {
-        lock (_fieldCache)
-        {
-            if (_fieldCache.TryGetValue(type, out var cached))
-            {
-                return cached;
-            }
-            var list = new List<FieldInfo>();
-            for (var t = type; t is not null && t != typeof(object) && t != typeof(ValueType); t = t.BaseType)
-            {
-                list.AddRange(t.GetFields(Declared));
-            }
-            var fields = list.ToArray();
-            _fieldCache[type] = fields;
-            return fields;
         }
     }
 }

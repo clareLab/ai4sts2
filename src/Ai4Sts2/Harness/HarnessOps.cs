@@ -62,6 +62,7 @@ public static class HarnessOps
             "wb.census" => Result(Census.Run()),
             "wb.snap" => Result(WorkbenchSnap()),
             "wb.restore" => Result(WorkbenchRestore(request.Args)),
+            "wb.search" => Result(WorkbenchSearch(request.Args)),
             _ => throw new NotSupportedException($"unknown op '{request.Op}'"),
         };
 
@@ -312,6 +313,15 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         var stats = Session.Instance.Restore(a.GetProperty("id").GetInt32());
         return new { Stats = stats, State = CombatDump.Capture() };
+    }
+
+    private static object WorkbenchSearch(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var maxNodes = a.TryGetProperty("maxNodes", out var n) ? n.GetInt32() : 2000;
+        var maxDepth = a.TryGetProperty("maxDepth", out var d) ? d.GetInt32() : 8;
+        var result = new Search(Session.Instance, maxNodes, maxDepth).Run();
+        return new { Result = result, State = CombatDump.Capture() };
     }
 
     private static object WorkbenchBench(JsonElement? args)
