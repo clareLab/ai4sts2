@@ -47,7 +47,8 @@ public sealed record RolloutPlan(
     int HpFloor = 0,
     bool Elite = false,
     int EliteTurns = 8,
-    int Salt = 0
+    int Salt = 0,
+    int Samples = 1
 );
 
 public sealed record RewardOptionResult(string Label, int? Card, string? Alternative, RolloutSummary Rollout);
@@ -408,6 +409,11 @@ public static class Rollout
         var fights = plan.Fights;
         var maxTurns = plan.MaxTurns;
         _salt = plan.Salt;
+        for (var skip = 0; skip < plan.Salt; skip++)
+        {
+            _ = run.Act.PullNextEncounter(RoomType.Monster);
+            run.Act.MarkRoomVisited(RoomType.Monster);
+        }
         foreach (var creature in run.Players.Select(p => p.Creature))
         {
             var floor = creature.MaxHp * plan.HpFloor / 100;
@@ -522,11 +528,20 @@ public static class Rollout
                 var cut = results[ordered[Math.Min(keep, ordered.Count) - 1]].Score;
                 finalists = ordered.Where((i, rank) => rank < keep || results[i].Score >= cut).ToList();
             }
+            var samples = Math.Max(1, plan.Samples);
             foreach (var i in finalists)
             {
-                applies[i]();
-                results[i] = Fights(session, options, plan);
-                _ = Loader.Restore(root, session.Pump);
+                RolloutSummary? first = null;
+                double total = 0;
+                for (var s = 0; s < samples; s++)
+                {
+                    applies[i]();
+                    var summary = Fights(session, options, plan with { Salt = plan.Salt + s });
+                    _ = Loader.Restore(root, session.Pump);
+                    first ??= summary;
+                    total += summary.Score;
+                }
+                results[i] = first! with { Score = total / samples };
             }
         }
         finally

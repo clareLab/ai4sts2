@@ -555,6 +555,7 @@ public static class HarnessOps
         var elite = a.TryGetProperty("elite", out var e) ? e.GetBoolean() : Tuning.EliteProbe;
         var eliteTurns = a.TryGetProperty("eliteTurns", out var et) ? et.GetInt32() : 8;
         var salt = a.TryGetProperty("salt", out var sa) ? sa.GetInt32() : 0;
+        var samples = a.TryGetProperty("samples", out var sm) ? sm.GetInt32() : Tuning.RolloutSamples;
         return new RolloutPlan(
             fights,
             maxTurns,
@@ -563,7 +564,8 @@ public static class HarnessOps
             deckChoice ? Tuning.RolloutHpFloor : 0,
             deckChoice && elite,
             eliteTurns,
-            salt
+            salt,
+            deckChoice ? samples : 1
         );
     }
 

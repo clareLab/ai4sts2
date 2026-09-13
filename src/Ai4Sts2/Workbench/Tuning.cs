@@ -33,6 +33,8 @@ public static class Tuning
 
     public static bool EliteProbe { get; set; }
 
+    public static int RolloutSamples { get; set; } = 1;
+
     public static bool RatePricing { get; set; }
 
     public static bool RateDebuffs { get; set; }
