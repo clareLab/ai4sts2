@@ -64,6 +64,9 @@ migrate:
 diff *args:
     python scripts/diff.py {{args}}
 
+solve *args:
+    python scripts/solve.py {{args}}
+
 monitor port="9418":
     python scripts/monitor.py --port {{port}} --open
 

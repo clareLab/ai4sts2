@@ -356,7 +356,8 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
     const modelsRow = scoped.filter((r) => r.kind === "models").slice(-1)[0] || rows.filter((r) => r.kind === "models").slice(-1)[0] || null;
     const benches = inWindow(scoped.filter((r) => r.kind === "bench" && r.result && r.result.plays && r.result.plays.count), f);
     const warmups = inWindow(scoped.filter((r) => r.kind === "warmup"), f);
-    const diffs = inWindow(scoped.filter((r) => r.kind === "diff"), f);
+    const diffs = inWindow(scoped.filter((r) => r.kind === "diff" || r.kind === "solve"), f);
+    const solves = inWindow(scoped.filter((r) => r.kind === "solve"), f);
     const perAction = (b) => { const r = b.result; const n = (r.plays.count || 0) + ((r.endTurns || {}).count || 0) + ((r.starts || {}).count || 0); return n ? r.allocatedBytes / n : null; };
     const cards = {}; const encounters = {}; let steps = 0, mism = 0; const seeds = new Set();
     for (const d of diffs) {
@@ -376,7 +377,9 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
         e.n += 1; e.steps += c.steps || 0; if (c.mismatches) e.fail = true; e.cases.push({ run: d.id, ci, seed: c.seed, steps: c.steps, mismatches: c.mismatches, outcome: c.outcome, ts: d.ts, replay: Boolean(d.replay) });
       });
     }
-    return { modelsRow, benches, warmups, diffs, perAction, cards, encounters, steps, mism, seeds };
+    const solveCases = solves.flatMap((r) => r.cases || []);
+    const solveStats = { runs: solves.length, cases: solveCases.length, won: solveCases.filter((c) => c.outcome === "won").length, nodes: solveCases.reduce((n, c) => n + (c.nodes || 0), 0), searches: solveCases.reduce((n, c) => n + (c.searches || 0), 0), millis: solveCases.reduce((n, c) => n + (c.searchMillis || 0), 0) };
+    return { modelsRow, benches, warmups, diffs, solves, solveStats, perAction, cards, encounters, steps, mism, seeds };
   }
 
   function statusPill(inst) {
@@ -537,6 +540,12 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
       tile("已验证牌", `${cardsVerified}<small>/ ${ironclad.length || "?"}</small>`, "", { cls: "", text: `${Object.keys(D.cards).length} 种打出过` }, "", href("/cards", f)),
       tile("已验证遭遇", `${encVerified}<small>/ ${encs.length || "?"}</small>`, "", { cls: "", text: `${D.seeds.size} 个种子` }, "", href("/encounters", f)),
     ].join("");
+    const S = D.solveStats;
+    const solveTiles = S.cases ? [
+      tile("自对弈胜率", `${fmt((S.won / S.cases) * 100, 0)}<small>%</small>`, "", { cls: "", text: `${S.won} / ${S.cases} 场 · ${S.runs} 次运行` }, "", href("/runs", f, { kind: "solve" })),
+      tile("每回合搜索", `${fmt(S.searches ? S.millis / S.searches : null, 0)}<small>ms</small>`, "", { cls: "", text: `${fmt(S.searches ? S.nodes / S.searches : null, 0)} 节点/回合` }, "", href("/runs", f, { kind: "solve" })),
+      tile("搜索总节点", fmt(S.nodes), "", { cls: "", text: `${fmt(S.millis / 1000, 1)} s` }, "", href("/runs", f, { kind: "solve" })),
+    ].join("") : "";
     const lw = D.warmups[D.warmups.length - 1] || null;
     const curve = lw && lw.result && lw.result.millisPerRound ? lw.result.millisPerRound : null;
     const colFig = curve
@@ -547,7 +556,7 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
     return `${filterBar(route, f)}
       <section class="lead">
         <a class="hero" href="${href("/runs", f, { kind: "diff" })}"><div class="label">累计不一致</div><div class="value ${D.mism ? "bad" : ""}">${fmt(D.mism)}</div><div class="sub">工作台 vs 真实流程 · <b>${fmt(D.steps)}</b> 步差分 · <b>${D.diffs.length}</b> 次运行<br>拦截点 <b>${patches == null ? "–" : fmt(patches)}</b> / 500 门禁</div></a>
-        <div class="tiles">${tiles}</div>
+        <div class="tiles">${tiles}${solveTiles}</div>
       </section>
       <section class="row2">
         ${figureWithTable("perf", "性能趋势", `<span class="legend"><span><i style="background:var(--s1)"></i>出牌</span><span><i style="background:var(--s2)"></i>结束回合（含敌方回合）</span><span><i style="background:var(--s3)"></i>开局</span></span><span>每次 bench 的中位 µs，对数轴 · 点一个点打开那次</span>`, logChart(D.benches, f), perfTable(D.benches))}
@@ -563,17 +572,18 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
 
   function runSummaryCells(r, f) {
     if (r.kind === "diff") return `${r.encounters.length} 遭遇 × ${r.seeds.length} 种子 · ${fmt(r.steps)} 步 · ${state(r.mismatches > 0, r.steps)}`;
+    if (r.kind === "solve") return `${r.encounters.length} 遭遇 × ${r.seeds.length} 种子 · 胜 ${r.won}/${(r.cases || []).length} · ${fmt(r.nodes)} 节点 · ${fmt(r.searchMillis / 1000, 1)} s 搜索 · ${r.verified ? state(r.mismatches > 0, r.steps) : "未核对"}`;
     if (r.kind === "bench") return `${esc(r.encounter)} × ${r.rounds} · 出牌 ${fmtUs((r.result || {}).plays && r.result.plays.median)} · 结束回合 ${fmtUs(((r.result || {}).endTurns || {}).median)}`;
     if (r.kind === "warmup") return `${esc(r.encounter)} · ${r.batches} × ${r.rounds} 场 · 末批 ${fmt((r.result.millisPerRound || []).slice(-1)[0], 2)} ms/场`;
     if (r.kind === "models") return `${r.cards} 张牌 · ${r.encounters} 个遭遇`;
     return "";
   }
-  const KINDS = { diff: "差分", bench: "Bench", warmup: "热身", models: "模型快照" };
+  const KINDS = { diff: "差分", solve: "自对弈", bench: "Bench", warmup: "热身", models: "模型快照" };
 
   function pageRuns(route, f) {
     const kind = route.q.get("kind") || "all";
     const rows = inWindow(inVersion(store.index, f).filter((r) => kind === "all" || r.kind === kind), f).slice().reverse();
-    const tabs = ["all", "diff", "bench", "warmup", "models"].map((k) => `<a href="${href("/runs", f, { kind: k === "all" ? null : k })}" aria-current="${k === kind}">${k === "all" ? "全部" : KINDS[k]}</a>`).join("");
+    const tabs = ["all", "diff", "solve", "bench", "warmup", "models"].map((k) => `<a href="${href("/runs", f, { kind: k === "all" ? null : k })}" aria-current="${k === kind}">${k === "all" ? "全部" : KINDS[k]}</a>`).join("");
     const body = rows.map((r) => `<tr><td class="muted"><a href="${href("/run/" + r.id, f)}">${short(r.ts)}</a></td><td>${KINDS[r.kind] || esc(r.kind)}</td><td>${runSummaryCells(r, f)}</td><td class="id">${esc(r.game || "?")}</td><td class="id"><a href="${href("/run/" + r.id, f)}">${esc(r.id)}</a></td></tr>`).join("");
     return `${filterBar(route, f)}<div class="panel"><header><h2>运行记录</h2><div class="cap"><span class="seg">${tabs}</span><span>窗口内 ${rows.length} 条</span></div></header><div class="tablewrap"><table><thead><tr><th>时间</th><th>类型</th><th>摘要</th><th>游戏版本</th><th>ID</th></tr></thead><tbody>${body || `<tr><td colspan="5" class="empty">没有记录</td></tr>`}</tbody></table></div></div>`;
   }
@@ -597,14 +607,18 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
     const head = `${crumbs([{ text: "总览", href: href("/", f) }, { text: "运行记录", href: href("/runs", f, { kind: r.kind }) }, { text: KINDS[r.kind] || r.kind }])}<h1>${KINDS[r.kind] || esc(r.kind)} · ${short(r.ts)}<span class="id">${esc(r.id)}</span></h1>`;
     const meta = kv([["游戏版本", esc(r.game || "?")], ["mod", esc(r.mod || "?")], ["commit", esc((r.build || {}).commit || "未提交")], ["mod 构建", short((r.build || {}).modBuilt)], ["记录格式", r.schema || 1]]);
     const models = await modelsFor(derive(store.index, f));
-    if (r.kind === "diff") {
+    if (r.kind === "diff" || r.kind === "solve") {
       const cases = (run && run.detail && run.detail.cases) || r.cases || [];
+      const isSolve = r.kind === "solve";
       const hasTrace = cases.some((c) => c.steps && Array.isArray(c.steps));
       const nsteps = (c) => Array.isArray(c.steps) ? c.steps.length : c.steps;
-      const rows = cases.map((c, ci) => `<tr><td class="num">${ci + 1}</td><td class="id"><a href="${href("/encounter/" + c.encounter, f)}">${esc(c.encounter)}</a></td><td class="id">${esc(c.seed)}</td><td class="num">${nsteps(c)}</td><td class="num">${c.turns ?? "–"}</td><td>${outcomeText[c.outcome] || (c.mismatches ? "不一致" : "–")}</td><td class="num">${c.hpLeft ?? "–"}</td><td class="num">${Object.keys(c.played || {}).length}</td><td>${state(c.mismatches > 0, nsteps(c))}</td><td class="num">${fmt(c.wallSeconds, 0)} s</td><td>${Array.isArray(c.steps) ? `<a class="btn" href="${href(`/run/${r.id}/${ci}/0`, f)}">回放</a>` : `<span class="muted">无回放数据</span>`}</td></tr>`).join("");
-      return `${head}<div class="row2"><div class="panel"><header><h2>参数</h2></header>${kv([["角色", esc(r.character)], ["遭遇", r.encounters.map((e) => `<a href="${href("/encounter/" + e, f)}">${esc(e)}</a>`).join(", ")], ["种子", r.seeds.map(esc).join(", ")], ["策略", esc(r.policy) + (r.randomSeed != null ? ` (seed ${r.randomSeed})` : "")], ["最大步数", r.maxSteps], ["oracle", r.oracle ? `${esc(r.oracle.game)} · FastMode ${esc(r.oracle.fastMode)}` : "–"], ["拦截点", r.patches ?? "–"], ["总步数", `${fmt(r.steps)} · 不一致 ${fmt(r.mismatches)}`], ["耗时", `${fmt(r.wallSeconds, 0)} s`]])}</div><div class="panel"><header><h2>记录</h2></header>${meta}</div></div>
+      const rows = cases.map((c, ci) => `<tr><td class="num">${ci + 1}</td><td class="id"><a href="${href("/encounter/" + c.encounter, f)}">${esc(c.encounter)}</a></td><td class="id">${esc(c.seed)}</td><td class="num">${nsteps(c)}</td><td class="num">${c.turns ?? "–"}</td><td>${outcomeText[c.outcome] || (c.mismatches ? "不一致" : "–")}</td><td class="num">${c.hpLeft ?? "–"}</td><td class="num">${Object.keys(c.played || {}).length}</td><td>${isSolve && !r.verified ? `<span class="muted">未核对</span>` : state(c.mismatches > 0, nsteps(c))}</td>${isSolve ? `<td class="num">${fmt(c.nodes)}</td><td class="num">${fmt(c.searchMillis, 0)}</td>` : ""}<td class="num">${fmt(c.wallSeconds, 0)} s</td><td>${Array.isArray(c.steps) ? `<a class="btn" href="${href(`/run/${r.id}/${ci}/0`, f)}">回放</a>` : `<span class="muted">无回放数据</span>`}</td></tr>`).join("");
+      const params = isSolve
+        ? kv([["角色", esc(r.character)], ["遭遇", r.encounters.map((e) => `<a href="${href("/encounter/" + e, f)}">${esc(e)}</a>`).join(", ")], ["种子", r.seeds.map(esc).join(", ")], ["搜索预算", `${fmt(r.maxNodes)} 节点 · 深度 ${r.maxDepth}`], ["核对", r.verified ? "真实流程逐步核对" : "未核对"], ["拦截点", r.patches ?? "–"], ["战绩", `胜 ${r.won} · 负 ${r.lost} · 共 ${(r.cases || []).length}`], ["搜索", `${fmt(r.nodes)} 节点 · ${fmt(r.searchMillis / 1000, 1)} s`], ["总步数", `${fmt(r.steps)} · 不一致 ${fmt(r.mismatches)}`], ["耗时", `${fmt(r.wallSeconds, 0)} s`]])
+        : kv([["角色", esc(r.character)], ["遭遇", r.encounters.map((e) => `<a href="${href("/encounter/" + e, f)}">${esc(e)}</a>`).join(", ")], ["种子", r.seeds.map(esc).join(", ")], ["策略", esc(r.policy) + (r.randomSeed != null ? ` (seed ${r.randomSeed})` : "")], ["最大步数", r.maxSteps], ["恢复探针", r.restore ? `每 ${r.restore.every} 步 · 绕行 ${r.restore.detour} 步` : "无"], ["oracle", r.oracle ? `${esc(r.oracle.game)} · FastMode ${esc(r.oracle.fastMode)}` : "–"], ["拦截点", r.patches ?? "–"], ["总步数", `${fmt(r.steps)} · 不一致 ${fmt(r.mismatches)}`], ["耗时", `${fmt(r.wallSeconds, 0)} s`]]);
+      return `${head}<div class="row2"><div class="panel"><header><h2>参数</h2></header>${params}</div><div class="panel"><header><h2>记录</h2></header>${meta}</div></div>
         <div class="panel"><header><h2>卡组</h2><div class="cap">${r.deck.length ? r.deck.length + " 张" : "角色起始卡组"}</div></header><div class="chips">${r.deck.map((spec) => { const plus = spec.indexOf("+"); const cid = plus < 0 ? spec : spec.slice(0, plus); const m = models.cards.find((c) => c.id === cid); return cardChip({ id: cid, cost: m ? m.cost : "", costsX: m ? m.costsX : false, upgrade: plus < 0 ? 0 : (spec.length === plus + 1 ? 1 : parseInt(spec.slice(plus + 1), 10) || 1) }, f); }).join("") || `<span class="muted">起始卡组</span>`}</div></div>
-        <div class="panel"><header><h2>对局</h2><div class="cap">${cases.length} 场${hasTrace ? "" : " · 这次运行早于回放记录功能"}</div></header><div class="tablewrap"><table><thead><tr><th class="num">#</th><th>遭遇</th><th>种子</th><th class="num">步数</th><th class="num">回合</th><th>结果</th><th class="num">剩余 HP</th><th class="num">牌种</th><th>一致性</th><th class="num">耗时</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+        <div class="panel"><header><h2>对局</h2><div class="cap">${cases.length} 场${hasTrace ? "" : " · 这次运行早于回放记录功能"}</div></header><div class="tablewrap"><table><thead><tr><th class="num">#</th><th>遭遇</th><th>种子</th><th class="num">步数</th><th class="num">回合</th><th>结果</th><th class="num">剩余 HP</th><th class="num">牌种</th><th>一致性</th>${isSolve ? `<th class="num">节点</th><th class="num">搜索 ms</th>` : ""}<th class="num">耗时</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     }
     if (r.kind === "bench") {
       const res = (run && run.detail && run.detail.result) || r.result;
@@ -654,6 +668,7 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
     const step = kk > 0 ? c.steps[kk - 1] : null;
     const me = st.players[0], pme = prev ? prev.players[0] : null;
     const at = (i) => href(`/run/${id}/${ci}/${i}`, f);
+    if (c.searches) { let si = -1, pos = 0; c.steps.forEach((s, i) => { if (s.search !== si) { si = s.search; pos = 0; } s.search_i = pos++; }); }
     const ticks = [`<a class="tick start ${kk === 0 ? "cur" : "done"} ${c.initialDiffs && c.initialDiffs.length ? "mismatch" : ""}" href="${at(0)}" data-focus="tick-0" aria-label="开局" data-tip="${esc(tipHead("开局") + tipRow(fmtUs(c.startMicros), "工作台开局"))}"></a>`]
       .concat(c.steps.map((s, i) => { const a = s.action; const label = a.kind === "play" ? `打出 ${human(a.card)}${a.target != null ? " → 敌 " + (a.target + 1) : ""}` : "结束回合"; return `<a class="tick ${a.kind} ${s.diffs.length ? "mismatch" : ""} ${i + 1 === kk ? "cur" : i + 1 < kk ? "done" : ""}" href="${at(i + 1)}" data-focus="tick-${i + 1}" aria-label="第 ${i + 1} 步 ${esc(label)}${s.diffs.length ? " 不一致" : ""}" data-tip="${esc(tipHead(`第 ${i + 1} 步 · 回合 ${s.state.players[0].turn}`) + tipRow(label, "") + tipRow(fmtUs(s.micros.wb), "工作台") + tipRow(fmtUs(s.micros.dev), "真实流程"))}"></a>`; })).join("");
     const tlLegend = `<div class="tl-legend"><span><i style="background:var(--axis)"></i>开局</span><span><i style="background:var(--seq-2)"></i>打出</span><span><i style="background:var(--s2)"></i>结束回合</span><span><i style="background:var(--critical)"></i>不一致</span><span class="muted">← → 逐步 · 空格 播放 · Home/End</span></div>`;
@@ -669,6 +684,9 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
     const energyPips = Array.from({ length: Math.max(me.energy, 3) }, (_, i) => `<i class="${i < me.energy ? "" : "off"}"></i>`).join("");
     const diffsHtml = (kk === 0 ? c.initialDiffs : step.diffs).map((d) => `<div class="id">${esc(d.path)}: 真实 <b>${esc(JSON.stringify(d.dev))}</b> · 工作台 <b>${esc(JSON.stringify(d.wb))}</b></div>`).join("");
     const handPrev = kk > 0 && step.action.kind === "play" ? step.action.hand : -1;
+    const search = kk > 0 && step.search != null && c.searches ? c.searches[step.search] : null;
+    const searchHtml = search ? `<div class="panel"><header><h2>这一步来自搜索</h2><div class="cap">回合 ${search.turn} · 得分 ${fmt(search.score, 0)} · ${fmt(search.nodes)} 节点 · ${fmt(search.transpositions)} 置换命中 · ${fmt(search.micros / 1000, 0)} ms（快照 ${fmt(search.snapMicros / 1000, 0)} · 恢复 ${fmt(search.restoreMicros / 1000, 0)} · 动作 ${fmt(search.actMicros / 1000, 0)}）${search.exhausted ? " · 搜完" : " · 触及预算"}</div></header><div class="chips">${search.line.map((a, i) => `<span class="card ${i === step.search_i ? "played" : ""}">${a.kind === "play" ? esc(human(a.card)) + (a.target != null ? " → 敌 " + (a.target + 1) : "") : "结束回合"}</span>`).join("")}</div></div>` : "";
+    const probes = (c.restores || []).length ? `<div class="panel"><header><h2>快照/恢复探针</h2><div class="cap">${c.restores.length} 次 · 绕行后恢复并继续核对</div></header><div class="tablewrap"><table><thead><tr><th>位置</th><th class="num">对象</th><th class="num">数组</th><th class="num">字段</th><th class="num">快照 µs</th><th class="num">恢复 µs</th><th>绕行</th><th>结果</th></tr></thead><tbody>${c.restores.map((r) => `<tr><td>${esc(r.at)}</td><td class="num">${fmt(r.objects)}</td><td class="num">${fmt(r.arrays)}</td><td class="num">${fmt(r.fields)}</td><td class="num">${fmt(r.snapMicros, 0)}</td><td class="num">${fmt(r.restoreMicros + r.resyncMicros, 0)}</td><td class="id">${r.detour.map((a) => a.kind === "play" ? human(a.card) : "结束回合").map(esc).join(" › ")}${r.detourEnded ? " · 战斗结束" : ""}</td><td>${state(r.diffs.length > 0, 1)}</td></tr>`).join("")}</tbody></table></div></div>` : "";
     return `${crumbs([{ text: "总览", href: href("/", f) }, { text: "运行记录", href: href("/runs", f, { kind: "diff" }) }, { text: short(run.ts), href: href("/run/" + id, f) }, { text: `第 ${ci + 1} 场` }])}
       <div class="replay">
         <div class="replay-head"><div><h1>${esc(human(c.encounter))} <span class="id">${esc(c.encounter)} · 种子 ${esc(c.seed)}</span></h1><div class="cap"><span>${outcomeText[c.outcome] || ""} · ${n} 步 · ${c.turns ?? "?"} 回合 · 剩余 HP ${c.hpLeft ?? "?"}</span>${c.mismatches ? `<span class="state fail">${badIcon}${c.mismatches} 处不一致</span>` : `<span class="state pass">${okIcon}逐步一致</span>`}<a href="${href("/encounter/" + c.encounter, f)}">此遭遇的全部对局</a>${ci > 0 ? `<a href="${href(`/run/${id}/${ci - 1}/0`, f)}">‹ 上一场</a>` : ""}${ci + 1 < cases.length ? `<a href="${href(`/run/${id}/${ci + 1}/0`, f)}">下一场 ›</a>` : ""}</div></div>
@@ -678,6 +696,7 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
         ${tlLegend}
         ${banner}
         ${diffsHtml ? `<div class="panel" style="border-color:var(--critical)"><header><h2>不一致</h2></header><div class="list">${diffsHtml}</div></div>` : ""}
+        ${searchHtml}
         <div class="board">
           <div class="panel"><header><h2>敌方</h2><div class="cap">${st.side === "Enemy" ? "敌方回合" : "我方回合"} · 第 ${st.round} 轮</div></header><div class="creatures">${st.enemies.map((e, i) => creatureCard(e, prev ? prev.enemies[i] : null, false)).join("")}</div></div>
           <div class="panel"><header><h2>我方</h2><div class="cap">回合 ${me.turn} · ${esc(me.phase)}</div></header><div class="creatures">${creatureCard(me.creature, pme ? pme.creature : null, true)}</div><div class="stats" style="margin-top:8px"><span>能量 <span class="energy ${pme && pme.energy !== me.energy ? "changed" : ""}">${energyPips}</span> <b>${me.energy}</b></span>${me.stars ? `<span>星 <b>${me.stars}</b></span>` : ""}<span>金币 <b>${me.gold}</b></span><span>遗物 ${me.relics.map((r) => `<span class="power">${esc(human(r))}</span>`).join(" ")}</span></div></div>
@@ -687,6 +706,7 @@ h1 .id { font-weight: 400; color: var(--ink-3); font-size: 13px; margin-left: 10
           <div class="panel"><header><h2>牌堆</h2></header><div class="piles">${pileBlock("抽牌堆（顶→底）", me.draw, f, false)}${pileBlock("弃牌堆", me.discard, f, false)}${pileBlock("消耗堆", me.exhaust, f, false)}${me.play.length ? pileBlock("打出中", me.play, f, true) : ""}</div></div>
           <div class="panel"><header><h2>RNG 计数器</h2><div class="cap">相对上一步的增量</div></header><div class="rng">${rngRows}</div></div>
         </div>
+        ${probes}
       </div>`;
   }
 
