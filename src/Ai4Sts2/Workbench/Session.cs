@@ -100,9 +100,12 @@ public sealed class Session
         return room.CombatState;
     }
 
-    public TimeSpan Play(int handIndex, int? enemyIndex)
+    public TimeSpan Play(int handIndex, int? enemyIndex) => Play(0, handIndex, enemyIndex);
+
+    public TimeSpan Play(int playerIndex, int handIndex, int? enemyIndex)
     {
-        var (state, player) = Current();
+        var (state, player) = Current(playerIndex);
+        using var scope = ActAs(player);
         var card = player.PlayerCombatState!.Hand.Cards[handIndex];
         var target = enemyIndex is { } i ? state.Enemies[i] : null;
         if (target is not null && !card.IsValidTarget(target))
@@ -150,14 +153,39 @@ public sealed class Session
 
     public void DropSnapshots() => _snaps.Clear();
 
-    public TimeSpan EndTurn()
+    public TimeSpan EndTurn() => EndTurn(0);
+
+    public TimeSpan EndTurn(int playerIndex)
     {
-        var (_, player) = Current();
+        var (state, player) = Current(playerIndex);
         var turn = player.PlayerCombatState!.TurnNumber;
+        var last = state.Players.All(p => p == player || CombatManager.Instance.IsPlayerReadyToEndTurn(p));
         var sw = Stopwatch.StartNew();
-        Pump.Run(() => PlayerCmd.EndTurn(player, false));
-        RequirePlayable(turn, "end turn");
+        using (ActAs(player))
+        {
+            Pump.Run(() => PlayerCmd.EndTurn(player, false));
+        }
+        if (last)
+        {
+            RequirePlayable(turn, "end turn");
+        }
         return sw.Elapsed;
+    }
+
+    public static bool HasEnded(Player player) => CombatManager.Instance.IsPlayerReadyToEndTurn(player);
+
+    public static IDisposable ActAs(Player player) => new ContextScope(player.NetId);
+
+    private sealed class ContextScope : IDisposable
+    {
+        private readonly ulong? _previous = LocalContext.NetId;
+
+        public ContextScope(ulong netId)
+        {
+            LocalContext.NetId = netId;
+        }
+
+        public void Dispose() => LocalContext.NetId = _previous;
     }
 
     private void ExitRooms(RunState run)
@@ -186,11 +214,13 @@ public sealed class Session
         );
     }
 
-    private static (CombatState State, Player Player) Current()
+    public static (CombatState State, Player Player) Current(int playerIndex)
     {
         var state = CombatManager.Instance.DebugOnlyGetState() ?? throw new InvalidOperationException("no combat");
-        var player = LocalContext.GetMe(state) ?? throw new InvalidOperationException("no local player");
-        return (state, player);
+        var players = state.Players;
+        return playerIndex < 0 || playerIndex >= players.Count
+            ? throw new ArgumentOutOfRangeException(nameof(playerIndex), $"player {playerIndex} of {players.Count}")
+            : (state, players[playerIndex]);
     }
 
     public void Dispose()

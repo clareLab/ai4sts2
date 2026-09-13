@@ -13,10 +13,13 @@ def play_line(wb, line):
     state = None
     for action in line:
         if action["kind"] == "play":
-            res = wb.call("wb.play", {"hand": action["hand"], "target": action.get("target")})
+            res = wb.call(
+                "wb.play",
+                {"player": action.get("player", 0), "hand": action["hand"], "target": action.get("target")},
+            )
             micros = res.get("playMicros")
         else:
-            res = wb.call("wb.endturn")
+            res = wb.call("wb.endturn", {"player": action.get("player", 0)})
             micros = res.get("endTurnMicros")
         state = res["state"]
         steps.append({"action": action, "state": state, "micros": {"wb": micros}})
@@ -72,7 +75,10 @@ def solve_case(wb, dev, a, seed, encounter, cards):
     }
     turns = 0
     while state["inProgress"] and turns < a.max_turns:
-        res = wb.call("wb.search", {"maxNodes": a.max_nodes, "maxDepth": a.max_depth})["result"]
+        res = wb.call(
+            "wb.search",
+            {"maxNodes": a.max_nodes, "maxDepth": a.max_depth, "leaf": a.leaf, "verify": a.verify},
+        )["result"]
         line = res["line"]
         trace["searches"].append(
             {
@@ -82,6 +88,9 @@ def solve_case(wb, dev, a, seed, encounter, cards):
                     k: res[k]
                     for k in (
                         "score",
+                        "estimated",
+                        "leaf",
+                        "verified",
                         "nodes",
                         "leaves",
                         "transpositions",
@@ -147,6 +156,8 @@ def main():
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=40)
     ap.add_argument("--no-verify", action="store_true")
+    ap.add_argument("--leaf", choices=["exact", "estimate"], default="exact")
+    ap.add_argument("--verify", type=int, default=3)
     a = ap.parse_args()
     a.character = a.character.upper()
     encounters = [e.upper() for e in a.encounter] or ["NIBBITS_WEAK"]
@@ -199,6 +210,8 @@ def main():
             "deck": cards,
             "maxNodes": a.max_nodes,
             "maxDepth": a.max_depth,
+            "leaf": a.leaf,
+            "verifyTop": a.verify,
             "verified": dev is not None,
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),

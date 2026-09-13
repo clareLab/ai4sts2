@@ -55,7 +55,7 @@ public static class HarnessOps
             "wb.run" => Result(WorkbenchRun(request.Args)),
             "wb.start" => Result(WorkbenchStart(request.Args)),
             "wb.play" => Result(WorkbenchPlay(request.Args)),
-            "wb.endturn" => Result(WorkbenchEndTurn()),
+            "wb.endturn" => Result(WorkbenchEndTurn(request.Args)),
             "wb.state" => Result(CombatDump.Capture()),
             "wb.bench" => Result(WorkbenchBench(request.Args)),
             "wb.warmup" => WorkbenchWarmupAsync(host, request.Args),
@@ -286,13 +286,15 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         int? target =
             a.TryGetProperty("target", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : null;
-        var elapsed = Session.Instance.Play(a.GetProperty("hand").GetInt32(), target);
+        var player = a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
+        var elapsed = Session.Instance.Play(player, a.GetProperty("hand").GetInt32(), target);
         return new { PlayMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
     }
 
-    private static object WorkbenchEndTurn()
+    private static object WorkbenchEndTurn(JsonElement? args)
     {
-        var elapsed = Session.Instance.EndTurn();
+        var player = args is { } a && a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
+        var elapsed = Session.Instance.EndTurn(player);
         return new { EndTurnMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
     }
 
@@ -351,7 +353,10 @@ public static class HarnessOps
         var a = args ?? throw new ArgumentException("args required");
         var maxNodes = a.TryGetProperty("maxNodes", out var n) ? n.GetInt32() : 2000;
         var maxDepth = a.TryGetProperty("maxDepth", out var d) ? d.GetInt32() : 8;
-        var result = new Search(Session.Instance, maxNodes, maxDepth).Run();
+        var leaf = a.TryGetProperty("leaf", out var l) ? l.GetString() ?? "exact" : "exact";
+        var verify = a.TryGetProperty("verify", out var v) ? v.GetInt32() : 3;
+        var options = new SearchOptions(maxNodes, maxDepth, leaf == "estimate", verify);
+        var result = new Search<SearchAction>(new CombatDomain(Session.Instance), options).Run();
         return new { Result = result, State = CombatDump.Capture() };
     }
 
