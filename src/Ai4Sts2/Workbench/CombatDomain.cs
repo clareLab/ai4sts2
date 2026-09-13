@@ -229,9 +229,59 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     }
                     moves++;
                 }
-                else if (node is RandomBranchState)
+                else if (node is RandomBranchState random)
                 {
-                    break;
+                    var expected = 0.0;
+                    var total = 0.0;
+                    var best = 0.0;
+                    MonsterState? likely = null;
+                    foreach (var branch in random.States)
+                    {
+                        if (
+                            monster.MoveStateMachine is not { } fsm
+                            || !fsm.States.TryGetValue(branch.stateId, out var candidate)
+                            || candidate is not MoveState option
+                        )
+                        {
+                            continue;
+                        }
+                        float weight;
+                        try
+                        {
+                            weight = RandomBranchState.GetStateWeight(branch, enemy) * branch.GetWeight();
+                        }
+                        catch (Exception e) when (e is InvalidOperationException or NullReferenceException)
+                        {
+                            weight = 1;
+                        }
+                        if (weight <= 0)
+                        {
+                            continue;
+                        }
+                        var sum = 0;
+                        foreach (var intent in option.Intents)
+                        {
+                            if (intent is AttackIntent attack)
+                            {
+                                sum += attack.GetTotalDamage(targets, enemy);
+                            }
+                        }
+                        expected += weight * sum;
+                        total += weight;
+                        if (weight > best)
+                        {
+                            best = weight;
+                            likely = option;
+                        }
+                    }
+                    if (total <= 0 || likely is null)
+                    {
+                        break;
+                    }
+                    damage[moves] = (int)Math.Round(expected / total);
+                    moves++;
+                    node = likely;
+                    continue;
                 }
                 string next;
                 try
