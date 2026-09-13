@@ -66,6 +66,7 @@ public static class HarnessOps
             "wb.bench" => Result(WorkbenchBench(request.Args)),
             "wb.warmup" => WorkbenchWarmupAsync(host, request.Args),
             "wb.census" => Result(Census.Run()),
+            "wb.awaits" => Result(WorkbenchAwaits()),
             "wb.snap" => Result(WorkbenchSnap()),
             "wb.snapbench" => Result(WorkbenchSnapBench(request.Args)),
             "wb.restore" => Result(WorkbenchRestore(request.Args)),
@@ -659,6 +660,16 @@ public static class HarnessOps
         var player = args is { } a && a.TryGetProperty("player", out var p) ? p.GetInt32() : 0;
         var elapsed = Session.Instance.EndTurn(player);
         return new { EndTurnMicros = elapsed.TotalMicroseconds, State = CombatDump.Capture() };
+    }
+
+    private static object WorkbenchAwaits()
+    {
+        var manager = CombatManager.Instance;
+        return new
+        {
+            TurnLoop = AwaitChain.Describe(manager._turnLoopTask),
+            Pump = new { Session.Instance.Pump.Posted, Session.Instance.Pump.Drained },
+        };
     }
 
     private static object WorkbenchSnap()

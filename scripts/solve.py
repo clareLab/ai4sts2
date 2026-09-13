@@ -179,6 +179,7 @@ def main():
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=40)
     ap.add_argument("--no-verify", action="store_true")
+    ap.add_argument("--instance", default="wb")
     ap.add_argument("--leaf", choices=["exact", "estimate"], default="exact")
     ap.add_argument("--beam", type=int, default=3)
     ap.add_argument("--turns", type=int, default=1)
@@ -188,7 +189,7 @@ def main():
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
     cards = [c.strip().upper() for c in a.cards.split(",") if c.strip()]
     potions = [c.strip().upper() for c in a.potions.split(",") if c.strip()]
-    wb = Harness("wb", timeout=900)
+    wb = Harness(a.instance, timeout=900)
     dev = None if a.no_verify else Harness("dev", timeout=600)
     if dev is not None:
         dev.call("mode.set", {"fastMode": "Instant"})

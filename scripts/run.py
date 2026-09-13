@@ -270,12 +270,13 @@ def main():
     ap.add_argument("--beam", type=int, default=3)
     ap.add_argument("--turns", type=int, default=1)
     ap.add_argument("--fights", type=int, default=2)
+    ap.add_argument("--instance", default="wb")
     ap.add_argument("--boss", action="store_true")
     ap.add_argument("--boss-turns", type=int, default=6)
     a = ap.parse_args()
     a.character = a.character.upper()
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
-    wb = Harness("wb", timeout=3600)
+    wb = Harness(a.instance, timeout=3600)
     ping = wb.call("ping")
     t0 = time.time()
     cases = []

@@ -73,19 +73,50 @@ public sealed class Pump : SynchronizationContext
         }
     }
 
+    public long Foreign { get; private set; }
+
     private void DrainAll()
     {
         var budget = DrainBudget;
-        while (_queue.TryDequeue(out var item))
+        while (true)
         {
-            if (--budget < 0)
+            while (_queue.TryDequeue(out var item))
             {
-                _queue.Clear();
-                throw new LeakedAwaitException($"runaway pump: more than {DrainBudget} continuations in one drive");
+                if (--budget < 0)
+                {
+                    _queue.Clear();
+                    throw new LeakedAwaitException($"runaway pump: more than {DrainBudget} continuations in one drive");
+                }
+                Drained++;
+                item.Callback(item.State);
             }
-            Drained++;
-            item.Callback(item.State);
+            if (!DrainForeign())
+            {
+                return;
+            }
         }
+    }
+
+    private bool DrainForeign()
+    {
+        var before = Posted;
+        var context = Godot.Dispatcher.SynchronizationContext;
+        var previous = Current;
+        SetSynchronizationContext(this);
+        try
+        {
+            context.ExecutePendingContinuations();
+        }
+        finally
+        {
+            SetSynchronizationContext(previous);
+        }
+        var ran = Posted != before || !_queue.IsEmpty;
+        if (ran)
+        {
+            Foreign++;
+        }
+        return ran;
     }
 
     private void Verify(Task task, string label)

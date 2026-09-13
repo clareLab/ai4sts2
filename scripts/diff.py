@@ -284,6 +284,8 @@ def main():
     ap.add_argument("--random", type=int, default=None)
     ap.add_argument("--restore-every", type=int, default=0)
     ap.add_argument("--detour", type=int, default=6)
+    ap.add_argument("--instance", default="wb")
+    ap.add_argument("--oracle", default="dev")
     a = ap.parse_args()
     restore = (a.restore_every, a.detour) if a.restore_every > 0 else None
     a.character = a.character.upper()
@@ -294,8 +296,8 @@ def main():
     cases = []
     traces = []
     t0 = time.time()
-    dev = Harness("dev")
-    wb = Harness("wb")
+    dev = Harness(a.oracle)
+    wb = Harness(a.instance)
     dev.call("mode.set", {"fastMode": "Instant"})
     ping = wb.call("ping")
     dev_ping = dev.call("ping")
