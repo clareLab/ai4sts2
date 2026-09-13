@@ -116,6 +116,10 @@ public sealed class Session
             _selectorScope?.Dispose();
             _selectorScope = null;
         }
+        Flow.Reset();
+        CardPlays.Clear();
+        CardFights.Clear();
+        Fight.Reset();
         return EnsureRun(characters, seed, ascension, realMap, host);
     }
 

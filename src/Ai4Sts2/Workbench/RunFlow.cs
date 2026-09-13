@@ -64,6 +64,13 @@ public sealed class RunFlow(Session session)
     private TreasureRoom? _openedChest;
     private List<RelicPickingResult>? _awarded;
 
+    public void Reset()
+    {
+        _offered.Clear();
+        _openedChest = null;
+        _awarded = null;
+    }
+
     public void Begin()
     {
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
