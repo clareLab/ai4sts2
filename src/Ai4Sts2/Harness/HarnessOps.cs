@@ -691,22 +691,6 @@ public static class HarnessOps
         var player = run.Players[slot];
         var options = RunManager.Instance.RestSiteSynchronizer.GetOptionsForPlayer(player).ToList();
         var choices = new List<(string Label, int? Index, Action Apply)>();
-        foreach (var option in options)
-        {
-            if (option.OptionId == "HEAL" && option.IsEnabled && player.Creature.CurrentHp < player.Creature.MaxHp)
-            {
-                var amount = (int)HealRestSiteOption.GetHealAmount(player);
-                choices.Add(
-                    (
-                        "HEAL",
-                        null,
-                        new Action(() =>
-                            session.Pump.Drive(() => CreatureCmd.Heal(player.Creature, amount, false), "rest heal")
-                        )
-                    )
-                );
-            }
-        }
         if (options.Any(o => o.OptionId == "SMITH" && o.IsEnabled))
         {
             var deck = player.Deck.Cards.Where(c => c.IsUpgradable).ToList();
@@ -721,6 +705,22 @@ public static class HarnessOps
                 var index = i;
                 choices.Add(
                     ($"SMITH {key}", index, new Action(() => CardCmd.Upgrade(deck[index], CardPreviewStyle.None)))
+                );
+            }
+        }
+        foreach (var option in options)
+        {
+            if (option.OptionId == "HEAL" && option.IsEnabled && player.Creature.CurrentHp < player.Creature.MaxHp)
+            {
+                var amount = (int)HealRestSiteOption.GetHealAmount(player);
+                choices.Add(
+                    (
+                        "HEAL",
+                        null,
+                        new Action(() =>
+                            session.Pump.Drive(() => CreatureCmd.Heal(player.Creature, amount, false), "rest heal")
+                        )
+                    )
                 );
             }
         }
