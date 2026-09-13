@@ -25,6 +25,8 @@ public static class Tuning
 
     public static int SmithCandidates { get; set; } = 5;
 
+    public static bool Record { get; set; } = Environment.GetEnvironmentVariable("AI4STS2_RECORD") == "1";
+
     public static int FocusFire { get; set; } = 7;
 
     public static int LevelDivisor { get; set; } = 5;

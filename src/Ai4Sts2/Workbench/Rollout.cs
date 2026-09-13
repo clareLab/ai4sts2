@@ -223,6 +223,16 @@ public static class Rollout
         var sw = Stopwatch.StartNew();
         var turns = 0;
         var nodes = 0;
+        var recording = Harness.Recorder.Active;
+        var hpStart = session.Run?.Players.Sum(p => p.Creature.CurrentHp) ?? 0;
+        var fightId = recording
+            ? Harness.Recorder.BeginFight(
+                Session.Current(0).State.Encounter?.Id.Entry ?? "?",
+                session.Run?.TotalFloor ?? 0,
+                null
+            )
+            : 0;
+        using var suspended = Harness.Recorder.Suspend();
         while (CombatManager.Instance.IsInProgress && turns < maxTurns)
         {
             var (result, chosen) = SearchTurn(session, options, coordinate);
@@ -249,6 +259,10 @@ public static class Rollout
                 }
             }
             var line = chosen.Count > 0 ? chosen : [new SearchAction("end", 0, -1, null, null)];
+            if (recording)
+            {
+                Harness.Recorder.Turn(fightId, turns + 1, line, result.Score, result.Nodes);
+            }
             if (trace is not null)
             {
                 var (state, player) = Session.Current(0);
@@ -280,13 +294,19 @@ public static class Rollout
             turns++;
         }
         var alive = session.Run!.Players.Any(p => p.Creature.IsAlive);
-        return (!CombatManager.Instance.IsInProgress && alive, turns, nodes, sw.Elapsed.TotalMicroseconds);
+        var won = !CombatManager.Instance.IsInProgress && alive;
+        if (recording)
+        {
+            Harness.Recorder.EndFight(fightId, won, hpStart, session.Run.Players.Sum(p => p.Creature.CurrentHp), turns);
+        }
+        return (won, turns, nodes, sw.Elapsed.TotalMicroseconds);
     }
 
     private static bool CoordinateOnly(Session session) => session.Run is { } run && run.Players.Count > 1;
 
     public static RolloutSummary Fights(Session session, SearchOptions options, RolloutPlan plan)
     {
+        using var quiet = Harness.Recorder.Suspend();
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         var details = new List<FightSummary>();
         var wins = 0;
@@ -389,6 +409,7 @@ public static class Rollout
 
     public static PathEvaluation EvaluateEvent(Session session, SearchOptions options, int maxTurns)
     {
+        using var quiet = Harness.Recorder.Suspend();
         var sw = Stopwatch.StartNew();
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         var flow = session.Flow;
@@ -445,6 +466,7 @@ public static class Rollout
 
     public static PathEvaluation EvaluatePaths(Session session, SearchOptions options, int maxTurns)
     {
+        using var quiet = Harness.Recorder.Suspend();
         var sw = Stopwatch.StartNew();
         var run = session.Run ?? throw new InvalidOperationException("run not set up");
         var flow = session.Flow;
