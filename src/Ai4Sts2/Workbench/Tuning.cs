@@ -43,6 +43,8 @@ public static class Tuning
 
     public static int HpWeight { get; set; } = 15;
 
+    public static int HpWeightNormal { get; set; } = 20;
+
     public static int TerminalWin { get; set; } = 1_000_000;
 
     public static bool RateDamage { get; set; }

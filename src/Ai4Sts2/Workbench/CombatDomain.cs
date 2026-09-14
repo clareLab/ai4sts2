@@ -21,7 +21,7 @@ public sealed record SearchAction(string Kind, int Player, int Hand, int? Target
 
 public sealed class CombatDomain : ISearchDomain<SearchAction>
 {
-    private static int HpWeight => Tuning.HpWeight;
+    private readonly int _hpWeight;
     private readonly Dictionary<uint, int> _rootEnemyMaxHp = [];
     private readonly Dictionary<string, Threat> _threats = [];
     private readonly int _potionValue;
@@ -46,6 +46,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         Session = session;
         var (state, _) = Session.Current(0);
         var hard = state.Encounter?.RoomType is RoomType.Elite or RoomType.Boss;
+        _hpWeight = hard ? Tuning.HpWeight : Tuning.HpWeightNormal;
         _potionValue = hard ? Tuning.PotionHoldHard : 260;
         _blockPotionValue = _potionValue;
         foreach (var enemy in state.Enemies)
@@ -65,7 +66,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     spike = Math.Max(spike, ThreatOf(enemy, state, state.Players[0]).MaxHit);
                 }
             }
-            _blockPotionValue = Math.Max(_potionValue, HpWeight * Math.Min(12, spike - Tuning.BlockPrior));
+            _blockPotionValue = Math.Max(_potionValue, _hpWeight * Math.Min(12, spike - Tuning.BlockPrior));
         }
         _probe = probe && Tuning.ProbeTurnEnd;
         var prior = 8.0 * (state.Players.Count > 0 ? state.Players[0].PlayerCombatState?.MaxEnergy ?? 3 : 3);
@@ -85,8 +86,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     continue;
                 }
                 var threat = ThreatOf(enemy, state, state.Players[0]);
-                _damageWeight[id] = Math.Clamp(HpWeight * threat.PerTurn / _damagePerTurn, 4, 25);
-                _killValue[id] = Math.Clamp(threat.PerTurn * _horizon * HpWeight, 100, 1_500);
+                _damageWeight[id] = Math.Clamp(_hpWeight * threat.PerTurn / _damagePerTurn, 4, 25);
+                _killValue[id] = Math.Clamp(threat.PerTurn * _horizon * _hpWeight, 100, 1_500);
             }
         }
     }
@@ -666,7 +667,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         foreach (var player in players)
         {
             var creature = player.Creature;
-            score -= (creature.MaxHp - creature.CurrentHp) * HpWeight;
+            score -= (creature.MaxHp - creature.CurrentHp) * _hpWeight;
             score -= Tuning.ConvexHp * Math.Max(0, (0.4 * creature.MaxHp) - creature.CurrentHp);
             if (!creature.IsAlive)
             {
@@ -729,7 +730,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             }
             var anticipated = _atTurnStart ? ExpectedBlock(state.Players[p]) : 0;
             var through = Math.Max(0, incoming[p] + Self[p] - creature.Block - Plating[p] - anticipated);
-            score -= through * HpWeight;
+            score -= through * _hpWeight;
             if (through >= creature.CurrentHp)
             {
                 score -= 100_000 + (Tuning.GradedLethal ? 200 * (through - creature.CurrentHp) : 0);
@@ -751,8 +752,8 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 }
             }
             var cover = Tuning.BlockPrior;
-            score -= HpWeight * Tuning.ReservePercent / 100.0 * Math.Max(0, following - cover - hpAfter);
-            score -= HpWeight * Tuning.SpikePercent / 100.0 * Math.Max(0, spike - cover - hpAfter);
+            score -= _hpWeight * Tuning.ReservePercent / 100.0 * Math.Max(0, following - cover - hpAfter);
+            score -= _hpWeight * Tuning.SpikePercent / 100.0 * Math.Max(0, spike - cover - hpAfter);
         }
         return score;
     }
@@ -945,19 +946,19 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             var share = (double)(creature.CurrentHp + creature.Block) / _enemyBulk;
             return power switch
             {
-                StrengthPower => amount * hits * _horizon * HpWeight,
+                StrengthPower => amount * hits * _horizon * _hpWeight,
                 VulnerablePower when Tuning.RateDebuffs => -0.5 * _damagePerTurn * turns * 10 * share,
-                WeakPower when Tuning.RateDebuffs => -0.25 * threat.PerTurn * turns * HpWeight,
+                WeakPower when Tuning.RateDebuffs => -0.25 * threat.PerTurn * turns * _hpWeight,
                 _ => null,
             };
         }
         return power switch
         {
             StrengthPower => amount * _attacksPerTurn * _horizon * 10,
-            DexterityPower => amount * _skillsPerTurn * _horizon * HpWeight,
-            VulnerablePower when Tuning.RateDebuffs => -0.5 * _incomingPerTurn * turns * HpWeight,
+            DexterityPower => amount * _skillsPerTurn * _horizon * _hpWeight,
+            VulnerablePower when Tuning.RateDebuffs => -0.5 * _incomingPerTurn * turns * _hpWeight,
             WeakPower when Tuning.RateDebuffs => -0.25 * _damagePerTurn * turns * 10,
-            FrailPower when Tuning.RateDebuffs => -0.25 * _blockPerTurn * turns * HpWeight,
+            FrailPower when Tuning.RateDebuffs => -0.25 * _blockPerTurn * turns * _hpWeight,
             _ => null,
         };
     }
