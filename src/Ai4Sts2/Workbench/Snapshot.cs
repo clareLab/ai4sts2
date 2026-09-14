@@ -263,24 +263,16 @@ public sealed class Snapshot
 
     private void Consider(object? value, HashSet<object> seen, Stack<object> stack)
     {
-        if (value is null or string)
+        if (value is null or string || !seen.Add(value))
         {
             return;
         }
         var (shape, _) = ShapeOf(value.GetType());
         if (shape == Shape.Source)
         {
-            if (seen.Add(value))
-            {
-                _sources.Add((value, IsCompleted(value)));
-            }
-            return;
+            _sources.Add((value, IsCompleted(value)));
         }
-        if (shape == Shape.Leaf || (shape == Shape.Model && ((AbstractModel)value).IsCanonical))
-        {
-            return;
-        }
-        if (seen.Add(value))
+        else if (shape == Shape.Reference || (shape == Shape.Model && !((AbstractModel)value).IsCanonical))
         {
             stack.Push(value);
         }
