@@ -871,7 +871,12 @@ public static class HarnessOps
                 );
             }
         }
-        var evaluation = Rollout.EvaluateChoices(session, "rest", choices, SearchOptionsFrom(a), PlanFrom(a));
+        var plan = PlanFrom(a);
+        if (run.CurrentMapPoint is { } point && point.Children.All(c => c.PointType == MapPointType.Boss))
+        {
+            plan = plan with { Fights = 0, Boss = true };
+        }
+        var evaluation = Rollout.EvaluateChoices(session, "rest", choices, SearchOptionsFrom(a), plan);
         return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 
