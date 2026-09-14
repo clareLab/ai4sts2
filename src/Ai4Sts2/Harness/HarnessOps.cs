@@ -937,11 +937,21 @@ public static class HarnessOps
         var player = inventory.Player;
         var choices = new List<(string Label, int? Index, Action Apply)> { ("Nothing", null, new Action(() => { })) };
         var entries = inventory.AllEntries.ToList();
+        var cards = entries
+            .OfType<MerchantCardEntry>()
+            .Where(e => e.IsStocked && e.EnoughGold && e.CreationResult is not null)
+            .OrderByDescending(e => session.Priors.GetValueOrDefault(e.CreationResult!.Card.Id.Entry))
+            .Take(Tuning.ShopCandidates)
+            .ToHashSet();
         for (var i = 0; i < entries.Count; i++)
         {
             var index = i;
             var entry = entries[i];
             if (!entry.IsStocked || !entry.EnoughGold || entry is MerchantPotionEntry)
+            {
+                continue;
+            }
+            if (entry is MerchantCardEntry cardEntry && !cards.Contains(cardEntry))
             {
                 continue;
             }

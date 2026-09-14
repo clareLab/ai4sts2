@@ -25,6 +25,8 @@ public static class Tuning
 
     public static int RemovalCandidates { get; set; } = 3;
 
+    public static int ShopCandidates { get; set; } = 3;
+
     public static int RemovalExposure { get; set; } = 2;
 
     public static int RolloutHpFloor { get; set; } = 65;
