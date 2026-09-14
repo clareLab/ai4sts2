@@ -408,6 +408,8 @@ public static class Rollout
         var lost = 0;
         var fights = plan.Fights;
         var maxTurns = plan.MaxTurns;
+        var playsBefore = new Dictionary<string, int>(session.CardPlays);
+        var fightsBefore = new Dictionary<CardModel, int>(session.CardFights);
         _salt = plan.Salt;
         for (var skip = 0; skip < plan.Salt; skip++)
         {
@@ -481,7 +483,52 @@ public static class Rollout
             score += (bossDamage * 3) + (after * 6) - (hpAfterFights * 6) + (won ? 3000 : 0);
             score -= alive ? 0 : 1500 + (2500.0 * remaining / Math.Max(1, bossMax));
         }
+        if (Tuning.UsageWeight > 0 && _rank is { } root)
+        {
+            score += Tuning.UsageWeight * Usage(session, run, root, playsBefore, fightsBefore);
+        }
         return new RolloutSummary(fights, wins, lost, score, details, elite, boss, bossDamage);
+    }
+
+    private static double Usage(
+        Session session,
+        RunState run,
+        Dictionary<CardModel, int> root,
+        Dictionary<string, int> playsBefore,
+        Dictionary<CardModel, int> fightsBefore
+    )
+    {
+        var deck = run.Players.SelectMany(p => p.Deck.Cards).ToList();
+        var copies = deck.GroupBy(c => c.Id.Entry).ToDictionary(g => g.Key, g => g.Count());
+        double Rate(CardModel card)
+        {
+            var id = card.Id.Entry;
+            var plays = session.CardPlays.GetValueOrDefault(id) - playsBefore.GetValueOrDefault(id);
+            var exposure = session.CardFights.GetValueOrDefault(card) - fightsBefore.GetValueOrDefault(card);
+            return exposure > 0 ? (double)plays / copies[id] / exposure : 0;
+        }
+        var rates = deck.Select(Rate).ToList();
+        var mean = rates.Count > 0 ? rates.Average() : 0;
+        double delta = 0;
+        for (var i = 0; i < deck.Count; i++)
+        {
+            if (!root.ContainsKey(deck[i]))
+            {
+                delta += rates[i] - mean;
+            }
+        }
+        foreach (var (card, _) in root)
+        {
+            if (!deck.Contains(card) && session.CardFights.GetValueOrDefault(card) > 0)
+            {
+                var historic =
+                    (double)session.CardPlays.GetValueOrDefault(card.Id.Entry)
+                    / Math.Max(1, root.Keys.Count(c => c.Id.Entry == card.Id.Entry))
+                    / session.CardFights[card];
+                delta += mean - historic;
+            }
+        }
+        return delta;
     }
 
     public static ChoiceEvaluation EvaluateChoices(
