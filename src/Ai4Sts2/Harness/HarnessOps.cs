@@ -593,11 +593,11 @@ public static class HarnessOps
             CardRarity.Common => 3,
             CardRarity.Uncommon => 4,
             CardRarity.Rare => 5,
-            CardRarity.None => throw new NotImplementedException(),
-            CardRarity.Ancient => throw new NotImplementedException(),
-            CardRarity.Event => throw new NotImplementedException(),
-            CardRarity.Token => throw new NotImplementedException(),
-            CardRarity.Quest => throw new NotImplementedException(),
+            CardRarity.None => 6,
+            CardRarity.Ancient => 6,
+            CardRarity.Event => 6,
+            CardRarity.Token => 6,
+            CardRarity.Quest => 6,
             _ => 6,
         };
 
