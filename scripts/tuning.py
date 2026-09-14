@@ -30,10 +30,10 @@ def value_hash(wb, path=VALUE_PATH):
     return wb.call("wb.value", {"path": os.path.abspath(path)})["hash"]
 
 
-def apply(wb, overrides=None, path=PATH, value_path=VALUE_PATH):
+def apply(wb, overrides=None, path=PATH, value_path=None):
     merged = dict(overrides or {})
     if "Value" not in merged and "Value" not in load(path):
-        digest = value_hash(wb, value_path)
+        digest = value_hash(wb, value_path or os.path.join(os.path.dirname(os.path.abspath(path)), "value.json"))
         if digest:
             merged["Value"] = digest
     echo = wb.call("wb.tune", args(merged, path))
