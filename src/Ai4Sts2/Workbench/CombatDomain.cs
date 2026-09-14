@@ -75,7 +75,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         _blockPerTurn = fight.Turns > 0 ? (double)fight.Block / fight.Turns : Tuning.BlockPrior;
         _attacksPerTurn = fight.Turns > 0 ? Math.Max(1, (double)fight.Attacks / fight.Turns) : 2.5;
         _skillsPerTurn = fight.Turns > 0 ? Math.Max(0.5, (double)fight.Skills / fight.Turns) : 1.5;
-        var bulk = state.Enemies.Where(e => e.IsAlive && e.MaxHp < 1_000_000).Sum(e => e.CurrentHp + e.Block);
+        var bulk = Bulk(state);
         _horizon = Math.Clamp(bulk / _damagePerTurn, 1, Tuning.RateHorizon);
         if (Tuning.RateDamage && state.Players.Count > 0)
         {
@@ -92,13 +92,21 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         }
     }
 
+    private static bool Required(Creature enemy) =>
+        enemy.IsAlive && enemy.MaxHp < 1_000_000 && (!Tuning.PrimaryBulk || !enemy.IsSecondaryEnemy);
+
+    private static int Bulk(CombatState state) =>
+        state.Enemies.Where(Required).Sum(e => e.CurrentHp + e.Block) is var primary && primary > 0
+            ? primary
+            : state.Enemies.Where(e => e.IsAlive && e.MaxHp < 1_000_000).Sum(e => e.CurrentHp + e.Block);
+
     private double DamageWeight(uint id) => Tuning.RateDamage && _damageWeight.TryGetValue(id, out var w) ? w : 10;
 
     private double KillValue(uint id) => Tuning.RateDamage && _killValue.TryGetValue(id, out var v) ? v : 500;
 
     private double RaceDeficit(CombatState state)
     {
-        var streams = new List<(double Rate, int Hp, int[] Chain)>();
+        var streams = new List<(double Rate, int Hp, int[] Chain, bool Required)>();
         var seat = state.Players.Count > 0 ? state.Players[Math.Min(ActivePlayer ?? 0, state.Players.Count - 1)] : null;
         if (seat is null)
         {
@@ -111,21 +119,31 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 continue;
             }
             var threat = ThreatOf(enemy, state, seat);
-            streams.Add((threat.PerTurn, enemy.CurrentHp + enemy.Block, threat.Damage));
+            streams.Add((threat.PerTurn, enemy.CurrentHp + enemy.Block, threat.Damage, Required(enemy)));
         }
         if (streams.Count == 0)
         {
             return 0;
         }
+        var required = streams.Count(s => s.Required);
+        var everyone = required == 0;
+        if (everyone)
+        {
+            required = streams.Count;
+        }
         double time = 0;
         double incoming = 0;
-        foreach (var (Rate, Hp, Chain) in streams.OrderByDescending(s => s.Rate / Math.Max(1, s.Hp)))
+        foreach (var (Rate, Hp, Chain, Required) in streams.OrderByDescending(s => s.Rate / Math.Max(1, s.Hp)))
         {
             time += Hp / _damagePerTurn;
             for (var i = 0; i < time; i++)
             {
                 var hit = i < Chain.Length ? Chain[i] : Rate;
                 incoming += hit * Math.Min(1, time - i);
+            }
+            if ((Required || everyone) && --required == 0)
+            {
+                break;
             }
         }
         double deficit = 0;
@@ -1097,13 +1115,9 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
     private static DeadlineInfo? Deadline(CombatState state)
     {
         var survive = int.MaxValue;
-        var bulk = 0;
+        var bulk = Bulk(state);
         foreach (var enemy in state.Enemies)
         {
-            if (enemy.IsAlive && enemy.MaxHp < 1_000_000)
-            {
-                bulk += enemy.CurrentHp + enemy.Block;
-            }
             foreach (var power in enemy.Powers)
             {
                 if (power is SandpitPower sandpit && sandpit.Target is { IsAlive: true })

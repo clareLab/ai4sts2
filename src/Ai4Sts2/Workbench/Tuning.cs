@@ -21,6 +21,8 @@ public static class Tuning
 
     public static int DoomWeight { get; set; } = 12;
 
+    public static bool PrimaryBulk { get; set; } = true;
+
     public static int HalvingAbove { get; set; } = 4;
 
     public static int SmithCandidates { get; set; } = 5;
