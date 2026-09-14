@@ -443,7 +443,10 @@ public static class Rollout
         }
         var hpAfterFights = run.Players.Sum(p => p.Creature.CurrentHp);
         var score =
-            (wins * 1000) + (hpAfterFights * 10) - ((fights - wins) * 5000) + (run.Players.Sum(p => p.Gold) * 0.6);
+            (wins * Tuning.RolloutWin)
+            + (hpAfterFights * Tuning.RolloutHp)
+            - ((fights - wins) * Tuning.RolloutLoss)
+            + (run.Players.Sum(p => p.Gold) * Tuning.GoldPercent / 100.0);
         FightSummary? elite = null;
         if (plan.Elite && wins == fights)
         {
@@ -457,8 +460,11 @@ public static class Rollout
             var remaining = Bulk(state.Enemies, e => e.IsAlive ? e.CurrentHp : 0);
             elite = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
             var alive = run.Players.Any(p => p.Creature.IsAlive);
-            score += ((eliteMax - remaining) * 3) - ((before - after) * 8) + (won ? 2000 : 0);
-            score -= alive ? 0 : 1500 + (2500.0 * remaining / Math.Max(1, eliteMax));
+            score += ((eliteMax - remaining) * Tuning.ProbeDamage) - ((before - after) * Tuning.EliteHp);
+            score += won ? Tuning.EliteWin : 0;
+            score -= alive
+                ? 0
+                : Tuning.ProbeDeath + ((double)Tuning.ProbeDeathRemaining * remaining / Math.Max(1, eliteMax));
             if (!alive)
             {
                 return new RolloutSummary(fights, wins, lost, score, details, elite, null, 0);
@@ -480,8 +486,13 @@ public static class Rollout
             bossDamage = bossMax - remaining;
             boss = new FightSummary(encounter.Id.Entry, won, before, after, turns, nodes, micros);
             var alive = run.Players.Any(p => p.Creature.IsAlive);
-            score += (bossDamage * 3) + (after * 6) - (hpAfterFights * 6) + (won ? 3000 : 0);
-            score -= alive ? 0 : 1500 + (2500.0 * remaining / Math.Max(1, bossMax));
+            score +=
+                (bossDamage * Tuning.ProbeDamage)
+                + ((after - hpAfterFights) * Tuning.BossHp)
+                + (won ? Tuning.BossWin : 0);
+            score -= alive
+                ? 0
+                : Tuning.ProbeDeath + ((double)Tuning.ProbeDeathRemaining * remaining / Math.Max(1, bossMax));
         }
         if (_rank is { } root)
         {
@@ -760,12 +771,12 @@ public static class Rollout
         (int Hp, int MaxHp, int Gold, int Deck, int Relics, int Potions) before,
         (int Hp, int MaxHp, int Gold, int Deck, int Relics, int Potions) after
     ) =>
-        ((after.Hp - before.Hp) * 10)
-        + ((after.MaxHp - before.MaxHp) * 12)
-        + ((after.Gold - before.Gold) * 0.6)
-        + ((after.Deck - before.Deck) * 40)
-        + ((after.Relics - before.Relics) * 120)
-        + ((after.Potions - before.Potions) * 60);
+        ((after.Hp - before.Hp) * Tuning.RolloutHp)
+        + ((after.MaxHp - before.MaxHp) * Tuning.EventMaxHp)
+        + ((after.Gold - before.Gold) * Tuning.GoldPercent / 100.0)
+        + ((after.Deck - before.Deck) * Tuning.EventDeck)
+        + ((after.Relics - before.Relics) * Tuning.EventRelic)
+        + ((after.Potions - before.Potions) * Tuning.EventPotion);
 
     private static void ResolveRoom(Session session, SearchOptions options, int maxTurns)
     {

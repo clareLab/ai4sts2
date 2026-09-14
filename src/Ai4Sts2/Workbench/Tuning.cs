@@ -39,6 +39,36 @@ public static class Tuning
 
     public static int PriorWeight { get; set; } = 80;
 
+    public static int RolloutWin { get; set; } = 1000;
+
+    public static int RolloutLoss { get; set; } = 5000;
+
+    public static int RolloutHp { get; set; } = 10;
+
+    public static int GoldPercent { get; set; } = 60;
+
+    public static int ProbeDamage { get; set; } = 3;
+
+    public static int EliteHp { get; set; } = 8;
+
+    public static int BossHp { get; set; } = 6;
+
+    public static int EliteWin { get; set; } = 2000;
+
+    public static int BossWin { get; set; } = 3000;
+
+    public static int ProbeDeath { get; set; } = 1500;
+
+    public static int ProbeDeathRemaining { get; set; } = 2500;
+
+    public static int EventMaxHp { get; set; } = 12;
+
+    public static int EventDeck { get; set; } = 40;
+
+    public static int EventRelic { get; set; } = 120;
+
+    public static int EventPotion { get; set; } = 60;
+
     public static bool RatePricing { get; set; }
 
     public static bool RateDebuffs { get; set; }
