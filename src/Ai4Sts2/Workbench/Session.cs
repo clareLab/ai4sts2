@@ -76,6 +76,18 @@ public sealed class Session
 
     public FightStats Fight { get; } = new();
 
+    private CombatState? _fightState;
+
+    public FightStats FightFor(CombatState state)
+    {
+        if (!ReferenceEquals(_fightState, state))
+        {
+            _fightState = state;
+            Fight.Reset();
+        }
+        return Fight;
+    }
+
     public RunState? Run { get; private set; }
 
     public CombatRoom? Room { get; private set; }
@@ -133,7 +145,7 @@ public sealed class Session
         Flow.Reset();
         CardPlays.Clear();
         CardFights.Clear();
-        Fight.Reset();
+        _fightState = null;
         return EnsureRun(characters, seed, ascension, realMap, host);
     }
 
@@ -204,7 +216,6 @@ public sealed class Session
     {
         var run = Run ?? throw new InvalidOperationException("run not set up");
         _snaps.Clear();
-        Fight.Reset();
         if (fullHeal)
         {
             foreach (var player in run.Players)

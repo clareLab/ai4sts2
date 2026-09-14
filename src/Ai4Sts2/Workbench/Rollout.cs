@@ -297,6 +297,7 @@ public static class Rollout
             }
             var replay = new CombatDomain(session, false);
             var (live, _) = Session.Current(0);
+            var fight = session.FightFor(live);
             var dealtBefore = CombatDomain.Dealt(live);
             var hpBefore = live.Players.Sum(p => p.Creature.CurrentHp);
             foreach (var action in line)
@@ -312,10 +313,10 @@ public static class Rollout
                     switch (hand is not null && action.Hand < hand.Count ? hand[action.Hand].Type : CardType.Curse)
                     {
                         case CardType.Attack:
-                            session.Fight.Attacks++;
+                            fight.Attacks++;
                             break;
                         case CardType.Skill:
-                            session.Fight.Skills++;
+                            fight.Skills++;
                             break;
                         case CardType.None:
                             break;
@@ -333,13 +334,13 @@ public static class Rollout
                 }
                 if (action.Kind == "end")
                 {
-                    session.Fight.Block += live.Players.Sum(p => p.Creature.Block);
+                    fight.Block += live.Players.Sum(p => p.Creature.Block);
                 }
                 _ = replay.Apply(action);
             }
-            session.Fight.Turns++;
-            session.Fight.Dealt += Math.Max(0, CombatDomain.Dealt(live) - dealtBefore);
-            session.Fight.HpLost += Math.Max(0, hpBefore - live.Players.Sum(p => p.Creature.CurrentHp));
+            fight.Turns++;
+            fight.Dealt += Math.Max(0, CombatDomain.Dealt(live) - dealtBefore);
+            fight.HpLost += Math.Max(0, hpBefore - live.Players.Sum(p => p.Creature.CurrentHp));
             turns++;
         }
         var alive = session.Run!.Players.Any(p => p.Creature.IsAlive);

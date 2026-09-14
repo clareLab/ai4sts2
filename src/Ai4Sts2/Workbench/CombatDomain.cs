@@ -70,7 +70,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         }
         _probe = probe && Modes.ProbeTurnEnd;
         var prior = 8.0 * (state.Players.Count > 0 ? state.Players[0].PlayerCombatState?.MaxEnergy ?? 3 : 3);
-        var fight = Session.Fight;
+        var fight = Session.FightFor(state);
         _damagePerTurn = fight.Turns > 0 ? Math.Max(prior * 0.5, (double)fight.Dealt / fight.Turns) : prior;
         _blockPerTurn = fight.Turns > 0 ? (double)fight.Block / fight.Turns : Tuning.BlockPrior;
         _attacksPerTurn = fight.Turns > 0 ? Math.Max(1, (double)fight.Attacks / fight.Turns) : 2.5;
