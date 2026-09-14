@@ -199,6 +199,71 @@ def evaluate(model, rows, fights, hold, a):
     }
 
 
+def contrast_groups(rows, fights, a, hold=None, side=None):
+    groups = {}
+    for r in rows:
+        if r["phase"] != "contrast" or r["extra"] is None or r["extra"].get("truncated"):
+            continue
+        if hold is not None and (fold(r["run"]) == hold) != side:
+            continue
+        fight = fights.get((r["run"], r["fight"]))
+        if fight is None:
+            continue
+        outcome = r["extra"]["hpEnd"] if r["extra"]["won"] else -a.loss_hp
+        groups.setdefault((r["run"], r["fight"], r["turn"]), []).append((r, outcome))
+    return {k: v for k, v in groups.items() if len(v) >= 2}
+
+
+def fit_contrast(rows, fights, a, hold=None):
+    groups = contrast_groups(rows, fights, a, hold, False)
+    if len(groups) < 30:
+        return None
+    support = {}
+    for members in groups.values():
+        for r, _ in members:
+            for name in r["f"]:
+                support[name] = support.get(name, 0) + 1
+    names = sorted(n for n, c in support.items() if c >= a.min_support)
+    index = {n: j for j, n in enumerate(names)}
+    dx = []
+    dy = []
+    for members in groups.values():
+        x = matrix([r for r, _ in members], names, index)
+        y = np.array([o for _, o in members], dtype=float)
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                dx.append(x[i] - x[j])
+                dy.append(y[i] - y[j])
+    dx = np.array(dx)
+    dy = np.array(dy)
+    scale = np.maximum(dx.std(axis=0), 1e-9)
+    lam = np.array([a.lambda_num if ":" not in n else a.lambda_cat * max(1.0, 50.0 / support[n]) for n in names])
+    w = ridge(dx / scale, dy, lam) / scale
+    return {"names": names, "wc": w.tolist(), "groups": len(groups), "pairs": len(dy)}
+
+
+def contrast_accuracy(model, rows, fights, hold, a):
+    groups = contrast_groups(rows, fights, a, hold, True)
+    index = {n: j for j, n in enumerate(model["names"])}
+    w = np.array(model["wc"])
+    counts = {"learned": 0, "hand": 0, "search": 0, "pairs": 0}
+    for members in groups.values():
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                (ri, yi), (rj, yj) = members[i], members[j]
+                if yi == yj:
+                    continue
+                target = np.sign(yi - yj)
+                vi = sum(w[index[n]] * v for n, v in ri["f"].items() if n in index)
+                vj = sum(w[index[n]] * v for n, v in rj["f"].items() if n in index)
+                counts["pairs"] += 1
+                counts["learned"] += np.sign(vi - vj) == target
+                counts["hand"] += np.sign(ri["extra"]["est"] - rj["extra"]["est"]) == target
+                counts["search"] += np.sign(ri["extra"]["real"] - rj["extra"]["real"]) == target
+    total = counts["pairs"]
+    return {k: (round(v / total, 3) if total and k != "pairs" else v) for k, v in counts.items()}
+
+
 def beam_accuracy(model, rows, fights, hold, a):
     groups = {}
     for r in rows:
@@ -239,6 +304,7 @@ def main():
     ap.add_argument("--min-support", type=int, default=20)
     ap.add_argument("--loss-hp", type=float, default=60.0)
     ap.add_argument("--holdout-side", action="store_true", default=False)
+    ap.add_argument("--contrast", action="store_true", default=False)
     a = ap.parse_args()
     paths = [p for spec in a.records.split(",") if spec for p in glob.glob(spec)]
     for tag in [t for t in a.tags.split(",") if t]:
@@ -263,6 +329,15 @@ def main():
         full = fit_phase(phase_rows, fights, a)
         report[phase] = {"folds": folds, "model": full}
         print(phase, json.dumps({k: v for k, v in folds.items()}, ensure_ascii=False))
+    contrast = {}
+    for hold in range(3):
+        model = fit_contrast(rows, fights, a, hold)
+        if model is not None:
+            contrast[hold] = contrast_accuracy(model, rows, fights, hold, a)
+    contrast_full = fit_contrast(rows, fights, a)
+    if contrast:
+        print("contrast", json.dumps(contrast, ensure_ascii=False))
+        report["contrast"] = {"folds": contrast, "model": contrast_full}
     models = {
         p: {k: v for k, v in report[p]["model"].items() if k != "index"}
         for p in PHASES
@@ -270,6 +345,10 @@ def main():
     }
     if not models:
         raise SystemExit("not enough labeled rows")
+    if contrast_full is not None and a.contrast:
+        for p in models:
+            models[p]["contrastNames"] = contrast_full["names"]
+            models[p]["wc"] = contrast_full["wc"]
     payload = {
         "game": meta.get("game"),
         "mod": meta.get("mod"),
@@ -288,6 +367,7 @@ def main():
         "runs": len(runs),
         "hash": digest,
         "metrics": {p: report[p]["folds"] for p in report},
+        "contrast": {"groups": contrast_full["groups"], "pairs": contrast_full["pairs"]} if contrast_full else None,
         "names": {p: len(models[p]["names"]) for p in models},
         "replay": False,
     }

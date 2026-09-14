@@ -4,11 +4,33 @@ using System.Text.Json;
 
 namespace Ai4Sts2.Workbench;
 
+public sealed class ContrastHead(IReadOnlyList<string> names, double[] wc)
+{
+    private readonly Dictionary<string, int> _index = names
+        .Select((n, i) => (n, i))
+        .ToDictionary(x => x.n, x => x.i, StringComparer.Ordinal);
+
+    public double Predict(IReadOnlyList<KeyValuePair<string, double>> features)
+    {
+        double z = 0;
+        foreach (var (name, value) in features)
+        {
+            if (_index.TryGetValue(name, out var j))
+            {
+                z += wc[j] * value;
+            }
+        }
+        return z;
+    }
+}
+
 public sealed class ValueHead(IReadOnlyList<string> names, double[] wp, double bp, double[] wh, double bh)
 {
     private readonly Dictionary<string, int> _index = names
         .Select((n, i) => (n, i))
         .ToDictionary(x => x.n, x => x.i, StringComparer.Ordinal);
+
+    public ContrastHead? Contrast { get; init; }
 
     public int Count => _index.Count;
 
@@ -64,13 +86,27 @@ public sealed class ValueModel
             {
                 throw new InvalidDataException($"value model phase {phase.Name} is malformed");
             }
+            ContrastHead? contrast = null;
+            if (p.TryGetProperty("wc", out var wcElement) && p.TryGetProperty("contrastNames", out var cn))
+            {
+                var contrastNames = cn.EnumerateArray().Select(n => n.GetString()!).ToList();
+                var wc = wcElement.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+                if (wc.Length != contrastNames.Count || wc.Any(double.IsNaN))
+                {
+                    throw new InvalidDataException($"value model phase {phase.Name} contrast head is malformed");
+                }
+                contrast = new ContrastHead(contrastNames, wc);
+            }
             phases[phase.Name] = new ValueHead(
                 names,
                 wp,
                 p.GetProperty("bp").GetDouble(),
                 wh,
                 p.GetProperty("bh").GetDouble()
-            );
+            )
+            {
+                Contrast = contrast,
+            };
         }
         var model = new ValueModel
         {
@@ -90,6 +126,10 @@ public sealed class ValueModel
         if (!Phases.TryGetValue(phase, out var head))
         {
             head = Phases.Values.First();
+        }
+        if (head.Contrast is { } contrast)
+        {
+            return contrast.Predict(features);
         }
         var (p, h) = head.Predict(features);
         var kept = hp - Math.Clamp(h, 0, hp);
