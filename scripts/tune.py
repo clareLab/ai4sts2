@@ -326,8 +326,7 @@ def main():
     instances = [x for x in a.instances.split(",") if x]
     wb = Harness(instances[0], timeout=3600)
     ping = wb.call("ping")
-    built = metrics.build_info().get("modBuilt")
-    stamp = f"{ping.get('game')}|{ping.get('mod')}|{ping.get('patches')}|{built}"
+    stamp = f"{ping.get('game')}|{ping.get('mod')}|{ping.get('patches')}|{ping.get('built')}"
     fingerprint = hashlib.sha1(stamp.encode()).hexdigest()[:12]
     factory = wb.call("wb.tune", {"reset": True})["tuning"]
     baseline = tuning.apply(wb)["tuning"]

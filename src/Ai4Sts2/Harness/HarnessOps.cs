@@ -112,6 +112,7 @@ public static class HarnessOps
         {
             Game = ReleaseInfoManager.Instance.SemVer?.ToString(),
             Mod = typeof(Entry).Assembly.GetName().Version?.ToString(),
+            Built = File.GetLastWriteTimeUtc(typeof(Entry).Assembly.Location).ToString("O"),
             MainThread = NGame.IsMainThread(),
             Headless = DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase),
             InRun = RunManager.Instance.IsInProgress,
