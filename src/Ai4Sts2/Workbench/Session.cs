@@ -61,7 +61,7 @@ public sealed class FightStats
 public sealed class Session
 {
     private const ulong LocalNetId = 1;
-    private readonly Dictionary<int, (Snapshot Snapshot, FightStats Fight)> _snaps = [];
+    private readonly Dictionary<int, (Snapshot Snapshot, FightStats Fight, CombatState? FightState)> _snaps = [];
     private int _snapSeq;
     private bool _appendedHistory;
     private IDisposable? _selectorScope;
@@ -331,7 +331,7 @@ public sealed class Session
     {
         var snap = Loader.Take();
         var id = ++_snapSeq;
-        _snaps[id] = (snap, Fight.Copy());
+        _snaps[id] = (snap, Fight.Copy(), _fightState);
         return (id, snap);
     }
 
@@ -342,6 +342,7 @@ public sealed class Session
             throw new KeyNotFoundException($"snapshot {id} not found");
         }
         Fight.CopyFrom(saved.Fight);
+        _fightState = saved.FightState;
         return Loader.Restore(saved.Snapshot, Pump);
     }
 
