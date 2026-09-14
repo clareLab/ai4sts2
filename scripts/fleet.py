@@ -9,6 +9,7 @@ import threading
 import time
 
 import stats
+import tuning
 from harness import Instance
 
 import metrics
@@ -87,6 +88,8 @@ def worker(name, jobs, a, log_dir, results, lock):
             str(a.players),
             "--tag",
             a.tag,
+            "--tuning",
+            os.path.join(log_dir, "tuning.json"),
             *a.run_args.split(),
         ]
         log_path = os.path.join(log_dir, f"{character}-{a.players}p-{seed}.log")
@@ -129,6 +132,12 @@ def main():
     log_dir = os.path.join(BATCHES, a.tag)
     os.makedirs(log_dir, exist_ok=True)
     shutil.copyfile(os.path.join(ROOT, "scripts", "run.py"), os.path.join(log_dir, "run.py"))
+    frozen = os.path.join(log_dir, "tuning.json")
+    if os.path.exists(tuning.PATH):
+        shutil.copyfile(tuning.PATH, frozen)
+    elif not os.path.exists(frozen):
+        with open(frozen, "w", encoding="utf-8") as f:
+            f.write("{}\n")
     print(f"fleet {a.tag}: {jobs.qsize()} jobs ({skipped} already recorded) on {a.instances}")
     results = []
     lock = threading.Lock()
