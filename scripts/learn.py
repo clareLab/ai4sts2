@@ -236,7 +236,7 @@ def fit_contrast(rows, fights, a, hold=None, phase="contrast"):
                 dy.append(y[i] - y[j])
     dx = np.array(dx)
     dy = np.array(dy)
-    scale = np.maximum(dx.std(axis=0), 1e-9)
+    scale = np.maximum(dx.std(axis=0), 0.1)
     lam = np.array([a.lambda_num if ":" not in n else a.lambda_cat * max(1.0, 50.0 / support[n]) for n in names])
     w = ridge(dx / scale, dy, lam) / scale
     return {"names": names, "wc": w.tolist(), "groups": len(groups), "pairs": len(dy)}
