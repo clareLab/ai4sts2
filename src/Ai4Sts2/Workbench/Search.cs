@@ -104,7 +104,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         _clock.Restart();
         _totalBudget = options.TotalBudget;
         var frozen = Snapshot.Frozen;
-        Snapshot.Frozen = Tuning.FreezeMap;
+        Snapshot.Frozen = Modes.FreezeMap;
         Snapshot root;
         (double score, IReadOnlyList<TAction> line, double estimated, IReadOnlyList<BeamEntry<TAction>> beam) result;
         try

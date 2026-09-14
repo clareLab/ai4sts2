@@ -2,6 +2,7 @@ import argparse
 import json
 import time
 
+import tuning
 from harness import Harness, HarnessError
 
 import metrics
@@ -18,7 +19,7 @@ def parse_config(spec):
 def split_tuning(config):
     search = {k: v for k, v in config.items() if not k.startswith("tune.")}
     tune = {k[5:]: v for k, v in config.items() if k.startswith("tune.")}
-    return search, {"reset": True, **tune}
+    return search, tuning.args(tune)
 
 
 def play(wb, a, seed, encounter, config, deck, potions):

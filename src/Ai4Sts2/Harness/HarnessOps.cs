@@ -78,7 +78,7 @@ public static class HarnessOps
             "wb.search" => Result(WorkbenchSearch(request.Args)),
             "wb.view" => Result(WorkbenchView(request.Args)),
             "wb.map" => Result(Session.Instance.Flow.MapSnapshot()),
-            "wb.tune" => Result(Tuning.Apply(request.Args)),
+            "wb.tune" => Result(WorkbenchTune(request.Args)),
             "wb.priors" => Result(WorkbenchPriors(request.Args)),
             "kernel.patches" => Result(Patches.Applied ? Patches.Statuses : Patches.Preview()),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
@@ -523,13 +523,65 @@ public static class HarnessOps
         return Flow(Session.Instance.Flow.View());
     }
 
-    private static SearchOptions SearchOptionsFrom(JsonElement a, int defaultNodes = 2000)
+    private static object WorkbenchTune(JsonElement? args)
     {
-        var maxNodes = a.TryGetProperty("maxNodes", out var n) ? n.GetInt32() : defaultNodes;
-        var maxDepth = a.TryGetProperty("maxDepth", out var d) ? d.GetInt32() : 8;
-        var leaf = a.TryGetProperty("leaf", out var l) ? l.GetString() ?? "estimate" : "estimate";
-        var beam = a.TryGetProperty("beam", out var b) ? b.GetInt32() : 3;
-        var turns = a.TryGetProperty("turns", out var t) ? t.GetInt32() : 1;
+        var reset =
+            args is { ValueKind: JsonValueKind.Object } a
+            && a.TryGetProperty("reset", out var r)
+            && r.ValueKind == JsonValueKind.True;
+        return new { Tuning = Tuning.Apply(args, reset), Modes = Modes.Apply(args, reset) };
+    }
+
+    private enum Budget
+    {
+        Search,
+        Hard,
+        Rollout,
+    }
+
+    private static (int Nodes, int Beam, int Turns) Defaults(Budget budget) =>
+        budget switch
+        {
+            Budget.Hard => (Tuning.HardNodes, Tuning.HardBeam, Tuning.HardTurns),
+            Budget.Rollout => (Tuning.RolloutNodes, Tuning.RolloutBeam, Tuning.RolloutTurns),
+            Budget.Search => (Tuning.SearchNodes, Tuning.SearchBeam, Tuning.SearchTurns),
+            _ => (Tuning.SearchNodes, Tuning.SearchBeam, Tuning.SearchTurns),
+        };
+
+    private static SearchOptions SearchOptionsFrom(JsonElement a, Budget budget = Budget.Rollout)
+    {
+        if (a.ValueKind != JsonValueKind.Object)
+        {
+            a = new JsonElement();
+        }
+        if (
+            budget == Budget.Search
+            && a.ValueKind == JsonValueKind.Object
+            && a.TryGetProperty("hard", out var h)
+            && h.GetBoolean()
+        )
+        {
+            budget = Budget.Hard;
+        }
+        var (nodes, beamDefault, turnsDefault) = Defaults(budget);
+        var maxNodes =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxNodes", out var n) ? n.GetInt32() : nodes;
+        var maxDepth =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxDepth", out var d)
+                ? d.GetInt32()
+                : Tuning.MaxDepth;
+        var leaf =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("leaf", out var l)
+                ? l.GetString() ?? "estimate"
+                : "estimate";
+        var beam =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("beam", out var b) ? b.GetInt32() : beamDefault;
+        var turns =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("turns", out var t) ? t.GetInt32() : turnsDefault;
+        if (a.ValueKind != JsonValueKind.Object)
+        {
+            return new SearchOptions(maxNodes, maxDepth, true, beam, turns);
+        }
         var totalNodes = a.TryGetProperty("maxTotalNodes", out var tn) ? tn.GetInt32() : 0;
         var diversify = !a.TryGetProperty("diversify", out var dv) || dv.GetBoolean();
         var canonical = !a.TryGetProperty("canonical", out var cn) || cn.GetBoolean();
@@ -549,12 +601,12 @@ public static class HarnessOps
 
     private static RolloutPlan PlanFrom(JsonElement a, bool deckChoice = false)
     {
-        var fights = a.TryGetProperty("fights", out var f) ? f.GetInt32() : 3;
-        var maxTurns = a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
-        var boss = a.TryGetProperty("boss", out var b) && b.GetBoolean();
-        var bossTurns = a.TryGetProperty("bossTurns", out var bt) ? bt.GetInt32() : 6;
+        var fights = a.TryGetProperty("fights", out var f) ? f.GetInt32() : Tuning.Fights;
+        var maxTurns = a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : Tuning.MaxTurns;
+        var boss = a.TryGetProperty("boss", out var b) ? b.GetBoolean() : Tuning.BossProbe;
+        var bossTurns = a.TryGetProperty("bossTurns", out var bt) ? bt.GetInt32() : Tuning.BossTurns;
         var elite = a.TryGetProperty("elite", out var e) ? e.GetBoolean() : Tuning.EliteProbe;
-        var eliteTurns = a.TryGetProperty("eliteTurns", out var et) ? et.GetInt32() : 8;
+        var eliteTurns = a.TryGetProperty("eliteTurns", out var et) ? et.GetInt32() : Tuning.EliteTurns;
         var salt = a.TryGetProperty("salt", out var sa) ? sa.GetInt32() : 0;
         var samples = a.TryGetProperty("samples", out var sm) ? sm.GetInt32() : Tuning.RolloutSamples;
         return new RolloutPlan(
@@ -618,10 +670,11 @@ public static class HarnessOps
     private static object WorkbenchEvalPath(JsonElement? args)
     {
         var a = args ?? new JsonElement();
-        var options =
-            a.ValueKind == JsonValueKind.Object ? SearchOptionsFrom(a, 600) : new SearchOptions(600, 8, true, 4, 1);
+        var options = SearchOptionsFrom(a);
         var maxTurns =
-            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m)
+                ? m.GetInt32()
+                : Tuning.MaxTurns;
         var evaluation = Rollout.EvaluatePaths(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
     }
@@ -629,10 +682,11 @@ public static class HarnessOps
     private static object WorkbenchEvalEvent(JsonElement? args)
     {
         var a = args ?? new JsonElement();
-        var options =
-            a.ValueKind == JsonValueKind.Object ? SearchOptionsFrom(a, 600) : new SearchOptions(600, 8, true, 4, 1);
+        var options = SearchOptionsFrom(a);
         var maxTurns =
-            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m)
+                ? m.GetInt32()
+                : Tuning.MaxTurns;
         var evaluation = Rollout.EvaluateEvent(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
     }
@@ -851,9 +905,10 @@ public static class HarnessOps
     {
         var a = args ?? new JsonElement();
         var maxTurns =
-            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
-        var options =
-            a.ValueKind == JsonValueKind.Object ? SearchOptionsFrom(a) : new SearchOptions(2000, 8, true, 3, 1);
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m)
+                ? m.GetInt32()
+                : Tuning.MaxTurns;
+        var options = SearchOptionsFrom(a, Budget.Search);
         var trace = new List<TurnTrace>();
         var (won, turns, nodes, micros) = Rollout.PlayCombat(Session.Instance, options, maxTurns, trace);
         return new

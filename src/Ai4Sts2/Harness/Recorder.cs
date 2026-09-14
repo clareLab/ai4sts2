@@ -12,7 +12,7 @@ public static class Recorder
     private static int _fight;
     private static int _depth;
 
-    public static bool Active => Tuning.Record && _depth == 0;
+    public static bool Active => Modes.Record && _depth == 0;
 
     public static IDisposable Suspend()
     {

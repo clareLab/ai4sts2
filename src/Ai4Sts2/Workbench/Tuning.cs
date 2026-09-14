@@ -21,8 +21,6 @@ public static class Tuning
 
     public static int HalvingAbove { get; set; } = 4;
 
-    public static bool ProbeTurnEnd { get; set; } = true;
-
     public static int SmithCandidates { get; set; } = 5;
 
     public static int RemovalCandidates { get; set; } = 3;
@@ -31,7 +29,7 @@ public static class Tuning
 
     public static int RolloutHpFloor { get; set; } = 65;
 
-    public static bool EliteProbe { get; set; }
+    public static bool EliteProbe { get; set; } = true;
 
     public static int RolloutSamples { get; set; } = 1;
 
@@ -83,12 +81,6 @@ public static class Tuning
 
     public static bool RateDamage { get; set; }
 
-    public static bool FreezeMap { get; set; } = true;
-
-    public static bool StableShuffle { get; set; } = true;
-
-    public static bool Record { get; set; } = Environment.GetEnvironmentVariable("AI4STS2_RECORD") == "1";
-
     public static int FocusFire { get; set; }
 
     public static int RaceWeight { get; set; } = 25;
@@ -107,27 +99,82 @@ public static class Tuning
 
     public static int BlockPrior { get; set; } = 10;
 
-    private static readonly Dictionary<string, object?> _defaults = Properties()
+    public static int SearchNodes { get; set; } = 400;
+
+    public static int SearchBeam { get; set; } = 3;
+
+    public static int SearchTurns { get; set; } = 2;
+
+    public static int HardNodes { get; set; } = 2500;
+
+    public static int HardBeam { get; set; } = 5;
+
+    public static int HardTurns { get; set; } = 3;
+
+    public static int RolloutNodes { get; set; } = 400;
+
+    public static int RolloutBeam { get; set; } = 3;
+
+    public static int RolloutTurns { get; set; } = 1;
+
+    public static int MaxDepth { get; set; } = 8;
+
+    public static int MaxTurns { get; set; } = 30;
+
+    public static int Fights { get; set; } = 2;
+
+    public static bool BossProbe { get; set; } = true;
+
+    public static int BossTurns { get; set; } = 6;
+
+    public static int EliteTurns { get; set; } = 8;
+
+    private static readonly Knobs _knobs = new(typeof(Tuning));
+
+    public static Dictionary<string, object?> Apply(JsonElement? args, bool reset) => _knobs.Apply(args, reset);
+}
+
+public static class Modes
+{
+    public static bool ProbeTurnEnd { get; set; } = true;
+
+    public static bool FreezeMap { get; set; } = true;
+
+    public static bool StableShuffle { get; set; } = true;
+
+    public static bool Record { get; set; } = Environment.GetEnvironmentVariable("AI4STS2_RECORD") == "1";
+
+    private static readonly Knobs _knobs = new(typeof(Modes));
+
+    public static Dictionary<string, object?> Apply(JsonElement? args, bool reset) => _knobs.Apply(args, reset);
+}
+
+public sealed class Knobs(Type owner)
+{
+    private readonly Dictionary<string, PropertyInfo> _properties = owner
+        .GetProperties(BindingFlags.Public | BindingFlags.Static)
+        .Where(p => p.CanWrite)
+        .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, object?> _defaults = owner
+        .GetProperties(BindingFlags.Public | BindingFlags.Static)
+        .Where(p => p.CanWrite)
         .ToDictionary(p => p.Name, p => p.GetValue(null));
 
-    private static IEnumerable<PropertyInfo> Properties() =>
-        typeof(Tuning).GetProperties(BindingFlags.Public | BindingFlags.Static).Where(p => p.CanWrite);
-
-    public static Dictionary<string, object?> Apply(JsonElement? args)
+    public Dictionary<string, object?> Apply(JsonElement? args, bool reset)
     {
-        var properties = Properties().ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+        if (reset)
+        {
+            foreach (var (name, value) in _defaults)
+            {
+                _properties[name].SetValue(null, value);
+            }
+        }
         if (args is { ValueKind: JsonValueKind.Object } a)
         {
-            if (a.TryGetProperty("reset", out var reset) && reset.ValueKind == JsonValueKind.True)
-            {
-                foreach (var (name, value) in _defaults)
-                {
-                    properties[name].SetValue(null, value);
-                }
-            }
             foreach (var entry in a.EnumerateObject())
             {
-                if (!properties.TryGetValue(entry.Name, out var property))
+                if (!_properties.TryGetValue(entry.Name, out var property))
                 {
                     continue;
                 }
@@ -140,6 +187,8 @@ public static class Tuning
                 property.SetValue(null, value);
             }
         }
-        return Properties().ToDictionary(p => p.Name, p => p.GetValue(null));
+        return _properties
+            .Values.OrderBy(p => p.Name, StringComparer.Ordinal)
+            .ToDictionary(p => p.Name, p => p.GetValue(null));
     }
 }

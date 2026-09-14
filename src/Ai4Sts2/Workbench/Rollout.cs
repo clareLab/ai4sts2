@@ -362,7 +362,7 @@ public static class Rollout
     [ThreadStatic]
     private static int _salt;
 
-    public static Action<List<CardModel>>? StableOrder => _rank is null || !Tuning.StableShuffle ? null : Reorder;
+    public static Action<List<CardModel>>? StableOrder => _rank is null || !Modes.StableShuffle ? null : Reorder;
 
     private static void Reorder(List<CardModel> cards)
     {

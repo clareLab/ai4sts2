@@ -68,7 +68,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             }
             _blockPotionValue = Math.Max(_potionValue, _hpWeight * Math.Min(12, spike - Tuning.BlockPrior));
         }
-        _probe = probe && Tuning.ProbeTurnEnd;
+        _probe = probe && Modes.ProbeTurnEnd;
         var prior = 8.0 * (state.Players.Count > 0 ? state.Players[0].PlayerCombatState?.MaxEnergy ?? 3 : 3);
         var fight = Session.Fight;
         _damagePerTurn = fight.Turns > 0 ? Math.Max(prior * 0.5, (double)fight.Dealt / fight.Turns) : prior;

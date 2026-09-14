@@ -3,6 +3,7 @@ import json
 import os
 import time
 
+import tuning
 from harness import Harness, HarnessError
 
 import metrics
@@ -92,9 +93,7 @@ def blend_paths(wb, a, view, weak, future):
     kinds = {c["type"] for c in view["choices"]}
     if len(view["choices"]) < 2 or (len(kinds) < 2 and not kinds & {"Elite", "Unknown"}):
         return None, None
-    path_eval = wb.call(
-        "wb.evalpath", {"maxTurns": a.max_turns, "maxNodes": a.rollout_nodes, "beam": a.rollout_beam, "turns": 1}
-    )["evaluation"]
+    path_eval = wb.call("wb.evalpath")["evaluation"]
     combined = {}
     for option in path_eval["options"]:
         if option.get("error"):
@@ -110,20 +109,7 @@ def blend_paths(wb, a, view, weak, future):
 
 
 def autoplay(wb, a, hard=False):
-    return wb.call(
-        "wb.autoplay",
-        {
-            "maxTurns": a.max_turns,
-            "maxNodes": a.boss_nodes if hard else a.max_nodes,
-            "maxDepth": a.max_depth,
-            "leaf": "estimate",
-            "beam": a.boss_beam if hard else a.beam,
-            "turns": a.boss_turns_search if hard else a.turns,
-            "escalate": a.escalate,
-            "diversify": not a.no_diversify,
-            "canonical": not a.no_canonical,
-        },
-    )
+    return wb.call("wb.autoplay", {"hard": hard})
 
 
 def combat_entry(entry, auto):
@@ -151,9 +137,7 @@ def handle_event(wb, a, entry):
         try:
             if a.no_event_eval:
                 raise StopIteration
-            ev = wb.call(
-                "wb.evalevent", {"maxTurns": a.max_turns, "maxNodes": a.max_nodes, "beam": a.beam, "turns": 1}
-            )["evaluation"]
+            ev = wb.call("wb.evalevent")["evaluation"]
             entry.setdefault("eventEvaluations", []).append(ev)
             best = ev.get("best")
             if best is None or best["col"] < 0:
@@ -203,7 +187,7 @@ def handle_treasure(wb, a, entry):
     relics = v["treasureRelics"]
     pick = 0
     if len(relics) > 1:
-        ev = wb.call("wb.evalrelic", plan_args(a))["evaluation"]
+        ev = wb.call("wb.evalrelic")["evaluation"]
         entry["evaluation"] = ev
         best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
         if best is not None and best.get("index") is not None:
@@ -231,7 +215,7 @@ def handle_rest(wb, a, entry, v, players):
         if p["hp"] <= 0:
             options.append(None)
             continue
-        ev = wb.call("wb.evalrest", {"player": slot, **plan_args(a)})["evaluation"]
+        ev = wb.call("wb.evalrest", {"player": slot})["evaluation"]
         entry.setdefault("smithEvaluations", []).append(ev)
         if slot == 0:
             entry["evaluation"] = ev
@@ -255,23 +239,6 @@ def handle_rest(wb, a, entry, v, players):
     }
 
 
-def plan_args(a):
-    return {
-        "fights": a.fights,
-        "maxTurns": a.max_turns,
-        "maxNodes": a.rollout_nodes,
-        "maxDepth": a.max_depth,
-        "leaf": "estimate",
-        "beam": a.rollout_beam,
-        "boss": a.boss,
-        "bossTurns": a.boss_turns,
-        "elite": a.elite,
-        "eliteTurns": a.elite_turns,
-        "diversify": not a.no_diversify,
-        "canonical": not a.no_canonical,
-    }
-
-
 def handle_shop(wb, a, entry):
     v = wb.call("wb.view")["view"]
     bought = []
@@ -284,7 +251,7 @@ def handle_shop(wb, a, entry):
 
 def shop_player(wb, a, slot, bought, evaluations):
     for _ in range(3):
-        ev = wb.call("wb.evalshop", {"player": slot, **plan_args(a)})["evaluation"]
+        ev = wb.call("wb.evalshop", {"player": slot})["evaluation"]
         evaluations.append(ev)
         best = next(o for o in ev["options"] if o["label"] == ev["best"])
         if best.get("index") is None:
@@ -318,9 +285,7 @@ def take_rewards(wb, a, entry):
         player = set_view["player"]
         for reward in set_view["rewards"]:
             if reward["kind"] == "card":
-                ev = wb.call("wb.evalreward", {"index": reward["index"], "player": player, **plan_args(a)})[
-                    "evaluation"
-                ]
+                ev = wb.call("wb.evalreward", {"index": reward["index"], "player": player})["evaluation"]
                 entry.setdefault("evaluations", []).append(ev)
                 if player == 0:
                     entry["evaluation"] = ev
@@ -519,44 +484,15 @@ def main():
     ap.add_argument("--players", type=int, default=1)
     ap.add_argument("--seed", default="AI4STS2")
     ap.add_argument("--max-floors", type=int, default=20)
-    ap.add_argument("--max-nodes", type=int, default=400)
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--tune", action="append", default=[])
     ap.add_argument("--priors", default=os.path.join(os.path.dirname(__file__), "..", "metrics", "priors.json"))
-    ap.add_argument("--max-depth", type=int, default=8)
-    ap.add_argument("--max-turns", type=int, default=30)
-    ap.add_argument("--beam", type=int, default=None)
-    ap.add_argument("--turns", type=int, default=None)
-    ap.add_argument("--boss-nodes", type=int, default=None)
-    ap.add_argument("--boss-beam", type=int, default=None)
-    ap.add_argument("--boss-turns-search", type=int, default=None)
-    ap.add_argument("--escalate", type=float, default=0.0)
-    ap.add_argument("--no-diversify", action="store_true")
-    ap.add_argument("--no-canonical", action="store_true")
     ap.add_argument("--no-event-eval", action="store_true")
-    ap.add_argument("--fights", type=int, default=2)
     ap.add_argument("--instance", default="wb")
     ap.add_argument("--net", choices=["host", "single"], default="host")
     ap.add_argument("--paths", action="store_true")
-    ap.add_argument("--boss", action="store_true")
-    ap.add_argument("--boss-turns", type=int, default=6)
-    ap.add_argument("--elite", action="store_true")
-    ap.add_argument("--elite-turns", type=int, default=8)
     ap.add_argument("--tag", default="")
-    ap.add_argument("--rollout-nodes", type=int, default=400)
-    ap.add_argument("--rollout-beam", type=int, default=3)
     a = ap.parse_args()
-    party = a.players > 1
-    defaults = {
-        "beam": 3,
-        "turns": 2,
-        "boss_nodes": 1500 if party else 2500,
-        "boss_beam": 4 if party else 5,
-        "boss_turns_search": 2 if party else 3,
-    }
-    for key, value in defaults.items():
-        if getattr(a, key) is None:
-            setattr(a, key, value)
     a.character = a.character.upper()
     seeds = [s.strip() for s in a.seed.split(",") if s.strip()]
     wb = Harness(a.instance, timeout=3600)
@@ -565,7 +501,7 @@ def main():
         k: (int(v) if v.lstrip("-").isdigit() else v.lower() == "true")
         for k, _, v in (t.partition("=") for t in a.tune)
     }
-    wb.call("wb.tune", {"reset": True, "Record": a.record, **tune})
+    knobs = tuning.apply(wb, {"Record": a.record, **tune})
     priors = {}
     if a.priors and os.path.exists(a.priors):
         with open(a.priors, encoding="utf-8") as f:
@@ -595,18 +531,23 @@ def main():
             "net": a.net,
             "tag": a.tag,
             "seeds": seeds,
-            "maxNodes": a.max_nodes,
-            "maxDepth": a.max_depth,
-            "beam": a.beam,
-            "turns": a.turns,
-            "bossSearch": {"maxNodes": a.boss_nodes, "beam": a.boss_beam, "turns": a.boss_turns_search},
-            "escalate": a.escalate,
-            "fights": a.fights,
+            "maxNodes": knobs["tuning"]["SearchNodes"],
+            "maxDepth": knobs["tuning"]["MaxDepth"],
+            "beam": knobs["tuning"]["SearchBeam"],
+            "turns": knobs["tuning"]["SearchTurns"],
+            "bossSearch": {
+                "maxNodes": knobs["tuning"]["HardNodes"],
+                "beam": knobs["tuning"]["HardBeam"],
+                "turns": knobs["tuning"]["HardTurns"],
+            },
+            "fights": knobs["tuning"]["Fights"],
             "paths": a.paths,
-            "boss": a.boss,
-            "bossTurns": a.boss_turns,
-            "elite": a.elite,
+            "boss": knobs["tuning"]["BossProbe"],
+            "bossTurns": knobs["tuning"]["BossTurns"],
+            "elite": knobs["tuning"]["EliteProbe"],
             "tune": tune,
+            "tuning": knobs["tuning"],
+            "modes": knobs["modes"],
             "priors": len(priors),
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
