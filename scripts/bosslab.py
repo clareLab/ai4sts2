@@ -93,10 +93,14 @@ def play(wb, case, config, max_turns):
     wb.call("wb.start", {**setup, "encounter": case["encounter"], "heal": False})
     search, tune = split_tuning(config)
     wb.call("wb.tune", tune)
-    res = wb.call("wb.autoplay", {"maxTurns": max_turns, **search})
+    hard = case["type"] in ("Boss", "Elite")
+    res = wb.call("wb.autoplay", {"maxTurns": max_turns, "hard": hard, **search})
+    enemies = [e for e in res["state"]["enemies"] if e["maxHp"] < 1_000_000]
+    remaining = sum(max(0, e["hp"]) for e in enemies) / max(1, sum(e["maxHp"] for e in enemies))
     return {
         "won": res["won"],
         "hp": sum(p["creature"]["hp"] for p in res["state"]["players"]),
+        "remaining": round(remaining, 3),
         "turns": res["turns"],
         "nodes": res["nodes"],
         "millis": round(res["micros"] / 1000, 1),
