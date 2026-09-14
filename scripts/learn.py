@@ -201,7 +201,7 @@ def evaluate(model, rows, fights, hold, a):
 
 def hand_of(r, phase):
     extra = r["extra"]
-    return extra.get("est") if phase == "contrast" else extra.get("real1", extra.get("real"))
+    return extra.get("est") if phase == "contrast" else extra.get("real1")
 
 
 def contrast_groups(rows, fights, a, hold=None, side=None, phase="contrast"):
