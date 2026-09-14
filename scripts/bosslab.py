@@ -10,12 +10,12 @@ from pair import parse_config, split_tuning
 import metrics
 
 
-def collect(paths, kinds, max_cases, min_floor=0):
+def collect(paths, kinds, max_cases, min_floor=0, exclude=None):
     cases = []
     for path in paths:
         with open(path, encoding="utf-8") as f:
             run = json.load(f)
-        if run.get("kind") != "run":
+        if run.get("kind") != "run" or (exclude and run.get("id") in exclude):
             continue
         detail = run.get("detail") or run
         for case in detail.get("cases", []):
