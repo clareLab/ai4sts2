@@ -893,7 +893,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return list;
     }
 
-    public double Evaluate() => Evaluate(true);
+    public double Evaluate() => !Terminal && ValueModel.Current is { } model ? Learned(model, "start") : Evaluate(true);
 
     private double Evaluate(bool deadline)
     {
@@ -913,10 +913,6 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 return 1_000_000 + alive.Sum(p => p.Creature.CurrentHp * 100);
             }
             score = Tuning.TerminalWin;
-        }
-        else if (ValueModel.Current is { } model)
-        {
-            return Learned(model, "start");
         }
         if (Tuning.RatePricing)
         {
@@ -1012,7 +1008,13 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     break;
             }
         }
-        var score = (100 * model.Value(phase, features, hp, Tuning.LossHp)) + DeadlineScore(state, phase == "start");
+        var alpha = model.Alpha(phase);
+        var score = 100 * model.Value(phase, features, hp, Tuning.LossHp);
+        if (alpha != 0)
+        {
+            return score + (alpha * (phase == "start" ? Evaluate(true) : HandEstimate()));
+        }
+        score += DeadlineScore(state, phase == "start");
         foreach (var player in state.Players)
         {
             if (!player.Creature.IsAlive)
@@ -1029,12 +1031,13 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return score;
     }
 
-    public double Estimate()
+    public double Estimate() =>
+        !Terminal && (_atTurnStart || Tuning.LearnedLeaves) && ValueModel.Current is { } model
+            ? Learned(model, _atTurnStart ? "start" : "leaf")
+            : HandEstimate();
+
+    private double HandEstimate()
     {
-        if (!Terminal && ValueModel.Current is { } model)
-        {
-            return Learned(model, _atTurnStart ? "start" : "leaf");
-        }
         var state = State();
         var score = Evaluate(false);
         if (Terminal)

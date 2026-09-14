@@ -199,10 +199,14 @@ def evaluate(model, rows, fights, hold, a):
     }
 
 
+def hand_of(r, phase):
+    return r["extra"].get("est") if phase == "contrast" else r["extra"].get("real1")
+
+
 def contrast_groups(rows, fights, a, hold=None, side=None, phase="contrast"):
     groups = {}
     for r in rows:
-        if r["phase"] != phase or r["extra"] is None or r["extra"].get("truncated"):
+        if r["phase"] != phase or r["extra"] is None or r["extra"].get("truncated") or hand_of(r, phase) is None:
             continue
         if hold is not None and (fold(r["run"]) == hold) != side:
             continue
@@ -229,6 +233,8 @@ def fit_contrast(rows, fights, a, hold=None, phase="contrast"):
     dy = []
     for members in groups.values():
         x = matrix([r for r, _ in members], names, index)
+        hand = np.array([hand_of(r, phase) / 100.0 for r, _ in members])[:, None]
+        x = np.hstack([x, hand])
         y = np.array([o for _, o in members], dtype=float)
         for i in range(len(members)):
             for j in range(i + 1, len(members)):
@@ -237,9 +243,17 @@ def fit_contrast(rows, fights, a, hold=None, phase="contrast"):
     dx = np.array(dx)
     dy = np.array(dy)
     scale = np.maximum(dx.std(axis=0), 0.1)
-    lam = np.array([a.lambda_num if ":" not in n else a.lambda_cat * max(1.0, 50.0 / support[n]) for n in names])
+    lam = np.array(
+        [a.lambda_num if ":" not in n else a.lambda_cat * max(1.0, 50.0 / support[n]) for n in names] + [1e-3]
+    )
     w = ridge(dx / scale, dy, lam) / scale
-    return {"names": names, "wc": w.tolist(), "groups": len(groups), "pairs": len(dy)}
+    return {
+        "names": names,
+        "wc": w[:-1].tolist(),
+        "alpha": float(w[-1]),
+        "groups": len(groups),
+        "pairs": len(dy),
+    }
 
 
 def contrast_accuracy(model, rows, fights, hold, a, phase="contrast"):
@@ -254,8 +268,14 @@ def contrast_accuracy(model, rows, fights, hold, a, phase="contrast"):
                 if yi == yj:
                     continue
                 target = np.sign(yi - yj)
-                vi = sum(w[index[n]] * v for n, v in ri["f"].items() if n in index)
-                vj = sum(w[index[n]] * v for n, v in rj["f"].items() if n in index)
+                vi = (
+                    sum(w[index[n]] * v for n, v in ri["f"].items() if n in index)
+                    + model["alpha"] * hand_of(ri, phase) / 100.0
+                )
+                vj = (
+                    sum(w[index[n]] * v for n, v in rj["f"].items() if n in index)
+                    + model["alpha"] * hand_of(rj, phase) / 100.0
+                )
                 counts["pairs"] += 1
                 counts["learned"] += np.sign(vi - vj) == target
                 counts["hand"] += np.sign(ri["extra"]["est"] - rj["extra"]["est"]) == target
@@ -357,6 +377,7 @@ def main():
             if head is not None:
                 models[p]["contrastNames"] = head["names"]
                 models[p]["wc"] = head["wc"]
+                models[p]["alpha"] = head["alpha"]
     payload = {
         "game": meta.get("game"),
         "mod": meta.get("mod"),

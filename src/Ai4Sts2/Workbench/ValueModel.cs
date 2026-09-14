@@ -32,6 +32,8 @@ public sealed class ValueHead(IReadOnlyList<string> names, double[] wp, double b
 
     public ContrastHead? Contrast { get; init; }
 
+    public double Alpha { get; init; }
+
     public int Count => _index.Count;
 
     public (double P, double H) Predict(IReadOnlyList<KeyValuePair<string, double>> features)
@@ -106,6 +108,7 @@ public sealed class ValueModel
             )
             {
                 Contrast = contrast,
+                Alpha = p.TryGetProperty("alpha", out var alpha) ? alpha.GetDouble() : 0,
             };
         }
         var model = new ValueModel
@@ -120,6 +123,8 @@ public sealed class ValueModel
         _loaded[hash] = model;
         return model;
     }
+
+    public double Alpha(string phase) => (Phases.TryGetValue(phase, out var head) ? head : Phases.Values.First()).Alpha;
 
     public double Value(string phase, IReadOnlyList<KeyValuePair<string, double>> features, double hp, double lossHp)
     {

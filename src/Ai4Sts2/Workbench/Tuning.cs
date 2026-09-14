@@ -23,6 +23,8 @@ public static class Tuning
 
     public static bool PrimaryBulk { get; set; } = true;
 
+    public static bool LearnedLeaves { get; set; }
+
     public static int HalvingAbove { get; set; } = 4;
 
     public static int SmithCandidates { get; set; } = 5;

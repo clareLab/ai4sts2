@@ -449,18 +449,16 @@ public static class Rollout
             Escalate = double.NegativeInfinity,
         };
         var rank = 0;
+        var usable = beam.Where(e => !e.Duplicate && e.Features is not null).ToList();
+        var lines = usable.Take(Tuning.ContrastBeam).ToList();
+        if (usable.Count > lines.Count)
+        {
+            lines.Add(usable[^1]);
+        }
         try
         {
-            foreach (var entry in beam)
+            foreach (var entry in lines)
             {
-                if (entry.Duplicate || entry.Features is null)
-                {
-                    continue;
-                }
-                if (rank >= Tuning.ContrastBeam)
-                {
-                    break;
-                }
                 _ = session.Restore(root);
                 var domain = new CombatDomain(session, false);
                 foreach (var action in entry.Line)
@@ -493,13 +491,14 @@ public static class Rollout
                 {
                     rank,
                     est = entry.Estimate,
+                    real1 = entry.Real1,
                     real = entry.Real,
                     won = !CombatManager.Instance.IsInProgress && alive,
                     truncated = CombatManager.Instance.IsInProgress && alive,
                     hpEnd = players.Sum(p => p.Creature.CurrentHp),
                     turns = extra + 1,
                 };
-                Harness.Recorder.Features(fightId, turn, "contrast", entry.Features, outcome);
+                Harness.Recorder.Features(fightId, turn, "contrast", entry.Features!, outcome);
                 if (start is not null)
                 {
                     Harness.Recorder.Features(fightId, turn, "contrastStart", start, outcome);
