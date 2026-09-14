@@ -35,7 +35,7 @@ public static class Tuning
 
     public static int RolloutSamples { get; set; } = 1;
 
-    public static int UsageWeight { get; set; } = 300;
+    public static int UsageWeight { get; set; } = 450;
 
     public static int PriorWeight { get; set; } = 80;
 
