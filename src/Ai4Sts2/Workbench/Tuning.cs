@@ -29,6 +29,10 @@ public static class Tuning
 
     public static int ShopCandidates { get; set; } = 3;
 
+    public static int ContrastBeam { get; set; } = 3;
+
+    public static int ContrastSpan { get; set; } = 3;
+
     public static int RemovalExposure { get; set; } = 2;
 
     public static int RolloutHpFloor { get; set; } = 65;

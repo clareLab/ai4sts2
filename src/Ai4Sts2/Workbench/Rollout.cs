@@ -264,6 +264,12 @@ public static class Rollout
             );
         }
         using var suspended = Harness.Recorder.Suspend();
+        var contrastTurn =
+            1
+            + (
+                (((fightId * 7919) + (Harness.Recorder.Run?.Sum(c => c) ?? 0)) & 0x7fff)
+                % Math.Max(1, Tuning.ContrastSpan)
+            );
         while (CombatManager.Instance.IsInProgress && turns < maxTurns)
         {
             if (recording)
@@ -299,6 +305,10 @@ public static class Rollout
                 }
             }
             var line = chosen.Count > 0 ? chosen : [new SearchAction("end", 0, -1, null, null)];
+            if (recording && Tuning.ContrastBeam > 0 && turns + 1 == contrastTurn && result.Beam.Count > 1)
+            {
+                Contrast(session, options, maxTurns - turns, fightId, turns + 1, result.Beam, coordinate);
+            }
             if (recording)
             {
                 Harness.Recorder.Turn(fightId, turns + 1, line, result.Score, result.Nodes);
@@ -418,6 +428,97 @@ public static class Rollout
     }
 
     private static bool CoordinateOnly(Session session) => session.Run is { } run && run.Players.Count > 1;
+
+    private static void Contrast(
+        Session session,
+        SearchOptions options,
+        int turnsLeft,
+        int fightId,
+        int turn,
+        IReadOnlyList<BeamEntry<SearchAction>> beam,
+        bool coordinate
+    )
+    {
+        var (root, _) = session.Snap();
+        var sw = Stopwatch.StartNew();
+        var continuation = options with
+        {
+            MaxNodes = Tuning.RolloutNodes,
+            Beam = Tuning.RolloutBeam,
+            Turns = Tuning.RolloutTurns,
+            Escalate = double.NegativeInfinity,
+        };
+        var rank = 0;
+        try
+        {
+            foreach (var entry in beam)
+            {
+                if (entry.Duplicate || entry.Features is null)
+                {
+                    continue;
+                }
+                if (rank >= Tuning.ContrastBeam)
+                {
+                    break;
+                }
+                _ = session.Restore(root);
+                var domain = new CombatDomain(session, false);
+                foreach (var action in entry.Line)
+                {
+                    if (domain.Terminal)
+                    {
+                        break;
+                    }
+                    _ = domain.Apply(action);
+                }
+                var extra = 0;
+                while (CombatManager.Instance.IsInProgress && extra < turnsLeft - 1)
+                {
+                    var (_, chosen) = SearchTurn(session, continuation, coordinate);
+                    var replay = new CombatDomain(session, false);
+                    foreach (var action in chosen.Count > 0 ? chosen : [new SearchAction("end", 0, -1, null, null)])
+                    {
+                        if (replay.Terminal)
+                        {
+                            break;
+                        }
+                        _ = replay.Apply(action);
+                    }
+                    extra++;
+                }
+                var players = session.Run!.Players;
+                var alive = players.Any(p => p.Creature.IsAlive);
+                Harness.Recorder.Features(
+                    fightId,
+                    turn,
+                    "contrast",
+                    entry.Features,
+                    new
+                    {
+                        rank,
+                        est = entry.Estimate,
+                        real = entry.Real,
+                        won = !CombatManager.Instance.IsInProgress && alive,
+                        truncated = CombatManager.Instance.IsInProgress && alive,
+                        hpEnd = players.Sum(p => p.Creature.CurrentHp),
+                        turns = extra + 1,
+                    }
+                );
+                rank++;
+            }
+        }
+        finally
+        {
+            _ = session.Restore(root);
+            session.Drop(root);
+            ContrastMicros += sw.Elapsed.TotalMicroseconds;
+            Contrasts += rank;
+        }
+    }
+
+    public static double ContrastMicros { get; private set; }
+
+    public static int Contrasts { get; private set; }
 
     [ThreadStatic]
     private static Dictionary<CardModel, int>? _rank;

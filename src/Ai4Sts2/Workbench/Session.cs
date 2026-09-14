@@ -349,6 +349,14 @@ public sealed class Session
 
     public void DropSnapshots() => _snaps.Clear();
 
+    public void Drop(int id)
+    {
+        if (_snaps.Remove(id, out var saved))
+        {
+            saved.Snapshot.Release();
+        }
+    }
+
     public TimeSpan EndTurn() => EndTurn(0);
 
     public TimeSpan EndTurn(int playerIndex)
