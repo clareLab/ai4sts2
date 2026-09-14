@@ -107,6 +107,7 @@ def main():
     ap.add_argument("--config", action="append", default=[])
     ap.add_argument("--salts", type=int, default=3)
     ap.add_argument("--anchors", default="")
+    ap.add_argument("--good", default="")
     ap.add_argument("--max-turns", type=int, default=30)
     ap.add_argument("--instance", default="wb")
     a = ap.parse_args()
@@ -116,6 +117,7 @@ def main():
     cases = collect(paths, a.max_cases, set(filter(None, a.characters.split(","))))
     configs = {c: parse_config(c) for c in (a.config or ["fights=2,boss=true", "fights=2,boss=true,elite=true"])}
     anchors = [x for x in a.anchors.split(",") if x]
+    good = [x for x in a.good.split(",") if x]
     wb = Harness(a.instance, timeout=3600)
     ping = wb.call("ping")
     t0 = time.time()
@@ -129,17 +131,23 @@ def main():
             for salt in range(a.salts):
                 try:
                     setup(wb, case)
-                    trials.append(evaluate(wb, case, config, salt, anchors, a.max_turns))
+                    trials.append(evaluate(wb, case, config, salt, anchors + good, a.max_turns))
                 except HarnessError as e:
                     trials.append({"error": str(e)[:300], "best": None, "scores": {}, "micros": 0})
             bests = [t["best"] for t in trials]
             reference = row["results"][next(iter(configs))] if row["results"] else None
             ref_best = mode(reference["bests"]) if reference else mode(bests)
             ref_scores = reference["meanScores"] if reference else mean_scores(trials)
+            planted = set(anchors + good)
             anchor_last = [
                 all(
-                    t["scores"].get(x, 0) <= min(v for k, v in t["scores"].items() if k not in anchors) for x in anchors
+                    t["scores"].get(x, 0) <= min(v for k, v in t["scores"].items() if k not in planted) for x in anchors
                 )
+                for t in trials
+                if t["scores"]
+            ]
+            good_first = [
+                all(t["scores"].get(x, 0) >= max(v for k, v in t["scores"].items() if k not in planted) for x in good)
                 for t in trials
                 if t["scores"]
             ]
@@ -151,17 +159,22 @@ def main():
                 "agreeRef": sum(1 for b in bests if b == ref_best) / max(1, len(bests)),
                 "rankCorr": spearman(mean_scores(trials), ref_scores),
                 "anchorsLast": sum(anchor_last) / max(1, len(anchor_last)) if anchors else None,
+                "goodFirst": sum(good_first) / max(1, len(good_first)) if good else None,
                 "millis": round(sum(t["micros"] for t in trials) / 1000),
             }
         rows.append(row)
         cells = " | ".join(
-            f"agree {r['agreement']:.2f} ref {r['agreeRef']:.2f} {'/'.join(str(t['best'])[:10] for t in r['trials'])} {r['millis']:>6}ms"
+            f"agree {r['agreement']:.2f} ref {r['agreeRef']:.2f}"
+            + (f" bad {r['anchorsLast']:.2f}" if anchors else "")
+            + (f" good {r['goodFirst']:.2f}" if good else "")
+            + f" {'/'.join(str(t['best'])[:10] for t in r['trials'])} {r['millis']:>6}ms"
             for r in row["results"].values()
         )
         print(f"{case['seed']:<6} f{case['floor']:<3} {case['character'][:6]} deck {len(case['deck']):>2} | {cells}")
     summary = {
         "configs": configs,
         "anchors": anchors,
+        "good": good,
         "salts": a.salts,
         "patches": ping.get("patches"),
         "cases": len(rows),
@@ -182,6 +195,11 @@ def main():
         }
         if anchors
         else None,
+        "goodFirst": {
+            n: round(sum(r["results"][n]["goodFirst"] or 0 for r in rows) / max(1, len(rows)), 3) for n in configs
+        }
+        if good
+        else None,
         "millis": {n: sum(r["results"][n]["millis"] for r in rows) for n in configs},
         "wallSeconds": round(time.time() - t0, 1),
         "replay": False,
@@ -193,7 +211,8 @@ def main():
         "agreement",
         " ".join(
             f"| {n}: self {summary['agreement'][n]} ref {summary['agreeRef'][n]} rho {summary['rankCorr'][n]}"
-            + (f" anchors-last {summary['anchorsLast'][n]}" if anchors else "")
+            + (f" bad-last {summary['anchorsLast'][n]}" if anchors else "")
+            + (f" good-first {summary['goodFirst'][n]}" if good else "")
             + f" {summary['millis'][n]} ms"
             for n in configs
         ),
