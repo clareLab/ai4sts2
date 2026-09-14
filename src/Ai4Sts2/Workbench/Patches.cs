@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Combat;
@@ -359,18 +360,62 @@ public static class Patches
         return !Switches.Applied;
     }
 
+    private sealed class CreatureLists
+    {
+        public List<Creature> Creatures = [];
+        public List<Creature> PlayerCreatures = [];
+        public List<Player> Players = [];
+        public readonly List<Creature> Seen = new(8);
+    }
+
+    private static readonly ConditionalWeakTable<CombatState, CreatureLists> _lists = [];
+
+    private static CreatureLists Lists(CombatState state)
+    {
+        var lists = _lists.GetValue(state, _ => new CreatureLists());
+        var allies = state._allies;
+        var enemies = state._enemies;
+        var seen = lists.Seen;
+        var same = seen.Count == allies.Count + enemies.Count;
+        for (var i = 0; same && i < allies.Count; i++)
+        {
+            same = ReferenceEquals(seen[i], allies[i]);
+        }
+        for (var i = 0; same && i < enemies.Count; i++)
+        {
+            same = ReferenceEquals(seen[allies.Count + i], enemies[i]);
+        }
+        if (same)
+        {
+            return lists;
+        }
+        seen.Clear();
+        seen.AddRange(allies);
+        seen.AddRange(enemies);
+        lists.Creatures = [.. seen];
+        lists.PlayerCreatures = new List<Creature>(seen.Count);
+        lists.Players = new List<Player>(seen.Count);
+        foreach (var creature in seen)
+        {
+            if (creature.IsPlayer)
+            {
+                lists.PlayerCreatures.Add(creature);
+            }
+            if (creature.Player is { } player)
+            {
+                lists.Players.Add(player);
+            }
+        }
+        return lists;
+    }
+
     private static bool Creatures(CombatState __instance, ref IReadOnlyList<Creature> __result)
     {
         if (!Switches.Applied)
         {
             return true;
         }
-        var allies = __instance._allies;
-        var enemies = __instance._enemies;
-        var list = new List<Creature>(allies.Count + enemies.Count);
-        list.AddRange(allies);
-        list.AddRange(enemies);
-        __result = list;
+        __result = Lists(__instance).Creatures;
         return false;
     }
 
@@ -380,10 +425,7 @@ public static class Patches
         {
             return true;
         }
-        var list = new List<Creature>(__instance._allies.Count);
-        Collect(__instance._allies, list);
-        Collect(__instance._enemies, list);
-        __result = list;
+        __result = Lists(__instance).PlayerCreatures;
         return false;
     }
 
@@ -393,33 +435,7 @@ public static class Patches
         {
             return true;
         }
-        var list = new List<Player>(__instance._allies.Count);
-        foreach (var creature in __instance._allies)
-        {
-            if (creature.Player is { } player)
-            {
-                list.Add(player);
-            }
-        }
-        foreach (var creature in __instance._enemies)
-        {
-            if (creature.Player is { } player)
-            {
-                list.Add(player);
-            }
-        }
-        __result = list;
+        __result = Lists(__instance).Players;
         return false;
-    }
-
-    private static void Collect(List<Creature> source, List<Creature> into)
-    {
-        foreach (var creature in source)
-        {
-            if (creature.IsPlayer)
-            {
-                into.Add(creature);
-            }
-        }
     }
 }

@@ -305,8 +305,9 @@ public sealed class Session
     public static Creature? PotionTarget(PotionModel potion, CombatState state, int? enemyIndex)
     {
         return !potion.TargetType.IsSingleTarget() ? null
-            : potion.TargetType is TargetType.AnyEnemy or TargetType.AnyPlayer or TargetType.AnyAlly
-                ? Target(state, enemyIndex) ?? (potion.TargetType == TargetType.AnyEnemy ? null : potion.Owner.Creature)
+            : potion.TargetType == TargetType.AnyEnemy ? Target(state, enemyIndex)
+            : potion.TargetType is TargetType.AnyPlayer or TargetType.AnyAlly && enemyIndex is < 0
+                ? Target(state, enemyIndex) ?? potion.Owner.Creature
             : potion.Owner.Creature;
     }
 
