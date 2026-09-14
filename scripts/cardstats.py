@@ -72,19 +72,51 @@ def gather(paths, character, horizon):
     return offered, taken, shift_taken, shift_passed, reach
 
 
-def priors(offered, taken, shift_taken, shift_passed, shrink):
+def simulated(paths, character):
+    effects = collections.defaultdict(list)
+    for path in paths:
+        with open(path, encoding="utf-8") as f:
+            run = json.load(f)
+        if run.get("kind") != "run" or (character and run.get("character") != character):
+            continue
+        for _, floors in floors_of(run):
+            for fl in floors:
+                for ev in fl.get("evaluations") or []:
+                    options = ev.get("options", [])
+                    skip = next((o for o in options if o.get("card") is None and o.get("rollout")), None)
+                    if skip is None or not skip["rollout"].get("fights"):
+                        continue
+                    base = skip["rollout"]
+                    for o in options:
+                        rollout = o.get("rollout")
+                        if o.get("card") is None or not rollout or rollout.get("fights") != base["fights"]:
+                            continue
+                        saved = (base["hpLost"] - rollout["hpLost"]) + 100 * (rollout["wins"] - base["wins"])
+                        effects[(run["character"], o["label"].split("+")[0])].append(saved / base["fights"])
+    return effects
+
+
+def priors(offered, taken, shift_taken, shift_passed, shrink, effects=None):
     table = collections.defaultdict(dict)
-    for key in offered:
+    effects = effects or {}
+    for key in set(offered) | set(effects):
         t = shift_taken[key]
         p = shift_passed[key]
-        if not t or not p:
+        parts = []
+        if t and p:
+            n = min(len(t), len(p))
+            parts.append((n, ((sum(p) / len(p)) - (sum(t) / len(t))) * n / (n + shrink)))
+        e = effects.get(key)
+        if e:
+            parts.append((len(e) / 4, (sum(e) / len(e)) * len(e) / (len(e) + 4 * shrink)))
+        if not parts:
             continue
-        n = min(len(t), len(p))
-        raw = (sum(p) / len(p)) - (sum(t) / len(t))
+        weight = sum(w for w, _ in parts)
         table[key[0]][key[1]] = {
             "offered": offered[key],
             "taken": taken[key],
-            "prior": round(raw * n / (n + shrink), 3),
+            "simulated": len(e) if e else 0,
+            "prior": round(sum(w * v for w, v in parts) / weight, 3),
         }
     return table
 
@@ -102,7 +134,7 @@ def main():
         glob.glob(os.path.join(os.path.dirname(__file__), "..", "metrics", "runs", "*-run-*.json"))
     )
     offered, taken, shift_taken, shift_passed, reach = gather(paths, a.character, a.horizon)
-    table = priors(offered, taken, shift_taken, shift_passed, a.shrink)
+    table = priors(offered, taken, shift_taken, shift_passed, a.shrink, simulated(paths, a.character))
     if a.write:
         with open(a.write, "w", encoding="utf-8") as f:
             json.dump(table, f, ensure_ascii=False, indent=1, sort_keys=True)
