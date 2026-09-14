@@ -81,20 +81,21 @@ def collect(paths, kinds, max_cases, min_floor=0):
     return cases
 
 
-def play(wb, case, config, max_turns):
+def setup(wb, case, seed=None):
     characters = [p["character"] for p in case["party"]]
-    setup = {"characters": characters, "seed": case["seed"], "ascension": 0, "net": case.get("net") or "single"}
-    wb.call("wb.run", setup)
+    spec = {"characters": characters, "seed": seed or case["seed"], "ascension": 0, "net": case.get("net") or "single"}
+    wb.call("wb.run", spec)
     for slot, p in enumerate(case["party"]):
         wb.call("deck.set", {"cards": p["deck"], "player": slot})
         wb.call("relics.set", {"relics": p["relics"], "player": slot})
         wb.call("potions.set", {"potions": [q for q in p["potions"] if q], "player": slot})
         wb.call("wb.sethp", {"hp": p["hp"], "maxHp": p["maxHp"], "player": slot})
-    wb.call("wb.start", {**setup, "encounter": case["encounter"], "heal": False})
-    search, tune = split_tuning(config)
-    wb.call("wb.tune", tune)
+    wb.call("wb.start", {**spec, "encounter": case["encounter"], "heal": False})
+
+
+def fight(wb, case, max_turns, search=None):
     hard = case["type"] in ("Boss", "Elite")
-    res = wb.call("wb.autoplay", {"maxTurns": max_turns, "hard": hard, **search})
+    res = wb.call("wb.autoplay", {"maxTurns": max_turns, "hard": hard, **(search or {})})
     enemies = [e for e in res["state"]["enemies"] if e["maxHp"] < 1_000_000]
     remaining = sum(max(0, e["hp"]) for e in enemies) / max(1, sum(e["maxHp"] for e in enemies))
     return {
@@ -105,6 +106,13 @@ def play(wb, case, config, max_turns):
         "nodes": res["nodes"],
         "millis": round(res["micros"] / 1000, 1),
     }
+
+
+def play(wb, case, config, max_turns):
+    setup(wb, case)
+    search, tune = split_tuning(config)
+    wb.call("wb.tune", tune)
+    return fight(wb, case, max_turns, search)
 
 
 def main():
