@@ -8,105 +8,6 @@ from harness import Harness, HarnessError
 
 import metrics
 
-PREFERENCE = ["Boss", "Monster", "Unknown", "RestSite", "Elite", "Shop", "Treasure"]
-
-
-def choose_point(view, hp, max_hp, floor):
-    choices = view["choices"]
-    if not choices:
-        return None
-    ratio = hp / max(1, max_hp)
-    order = list(PREFERENCE)
-    if ratio < 0.6 and any(c["type"] == "RestSite" for c in choices):
-        order.remove("RestSite")
-        order.insert(0, "RestSite")
-    if ratio < 0.7 or floor < 4:
-        order.remove("Elite")
-        order.append("Elite")
-    for kind in order:
-        for c in choices:
-            if c["type"] == kind:
-                return c
-    return choices[0]
-
-
-ROUTE_VALUE = {"Monster": 30, "Elite": 110, "Unknown": 25, "Ancient": 25, "Shop": 20, "Treasure": 90}
-ROUTE_LOSS = {"Monster": 0.08, "Elite": 0.22, "Unknown": 0.03, "Ancient": 0.03}
-
-
-def plan_route(map_view, ratio, gold):
-    points = {(p["col"], p["row"]): p for p in map_view["points"]}
-    memo = {}
-
-    def best(coord, hp):
-        key = (coord, round(hp, 2))
-        if key in memo:
-            return memo[key]
-        point = points[coord]
-        kind = point["type"]
-        value = ROUTE_VALUE.get(kind, 0)
-        if kind == "Elite" and hp < 0.55:
-            value = -150
-        if kind == "RestSite":
-            if hp < 0.7:
-                value = 60 * (1 - hp)
-                hp = min(1.0, hp + 0.3)
-            else:
-                value = 35
-        elif kind == "Shop":
-            value = 20 if gold >= 120 else 5
-        hp -= ROUTE_LOSS.get(kind, 0.0)
-        if hp <= 0.15:
-            value -= 500
-        children = [tuple(c) for c in point["children"]]
-        if not children or kind == "Boss":
-            memo[key] = (value + hp * 250, None)
-            return memo[key]
-        total, child = max((best(c, hp)[0], c) for c in children)
-        memo[key] = (value + total, child)
-        return memo[key]
-
-    scores = {(c["col"], c["row"]): best((c["col"], c["row"]), ratio)[0] for c in map_view["choices"]}
-
-    def future(coord, hp):
-        children = [tuple(c) for c in points[coord]["children"]]
-        return max((best(c, hp)[0] for c in children), default=hp * 250)
-
-    return scores, future
-
-
-def choose_route(wb, view, weak, gold, floor):
-    try:
-        map_view = wb.call("wb.map")
-    except HarnessError:
-        return choose_point(view, weak["hp"], weak["maxHp"], floor), None
-    map_view["choices"] = view["choices"]
-    scores, future = plan_route(map_view, weak["hp"] / max(1, weak["maxHp"]), gold)
-    if not scores:
-        return choose_point(view, weak["hp"], weak["maxHp"], floor), None, None
-    coord = max(scores, key=scores.get)
-    choice = next(c for c in view["choices"] if (c["col"], c["row"]) == coord)
-    return choice, {f"{k[0]},{k[1]}": round(v, 1) for k, v in scores.items()}, future
-
-
-def blend_paths(wb, a, view, weak, future):
-    kinds = {c["type"] for c in view["choices"]}
-    if len(view["choices"]) < 2 or (len(kinds) < 2 and not kinds & {"Elite", "Unknown"}):
-        return None, None
-    path_eval = wb.call("wb.evalpath")["evaluation"]
-    combined = {}
-    for option in path_eval["options"]:
-        if option.get("error"):
-            continue
-        c = option["choice"]
-        ratio = option["hp"] / max(1, weak["maxHp"])
-        combined[(c["col"], c["row"])] = option["score"] + 3 * future((c["col"], c["row"]), ratio)
-    path_eval["combined"] = {f"{k[0]},{k[1]}": round(v, 1) for k, v in combined.items()}
-    if not combined:
-        return path_eval, None
-    coord = max(combined, key=combined.get)
-    return path_eval, next(c for c in view["choices"] if (c["col"], c["row"]) == coord)
-
 
 def autoplay(wb, a, hard=False):
     return wb.call("wb.autoplay", {"hard": hard})
@@ -200,11 +101,6 @@ def handle_treasure(wb, a, entry):
         "picked": res.get("picked"),
         "pickedAll": res.get("pickedAll"),
     }
-
-
-def weakest(players):
-    alive = [p for p in players if p["hp"] > 0] or players
-    return min(alive, key=lambda p: p["hp"] / max(1, p["maxHp"]))
 
 
 def handle_rest(wb, a, entry, v, players):
@@ -396,22 +292,21 @@ def play_run(wb, a, seed):
                     except HarnessError as e:
                         print(f"    event {after['event']} could not be finished: {str(e)[:120]}")
             continue
-        weak = weakest(state["players"])
-        choice, route_scores, future = (
-            choose_route(wb, view, weak, me["gold"], view["floor"]) if view["choices"] else (None, None, None)
-        )
+        plan = wb.call("wb.route", {"paths": a.paths})["plan"] if view["choices"] else None
+        choice = plan["choice"] if plan else None
         if choice is None:
             outcome = "stuck"
             break
         t1 = time.time()
-        path_eval = None
-        if a.paths and future is not None:
-            try:
-                path_eval, blended = blend_paths(wb, a, view, weak, future)
-                if blended is not None:
-                    choice = blended
-            except HarnessError as e:
-                path_eval = {"error": str(e)[:300]}
+        route_scores = {f"{o['col']},{o['row']}": round(o["score"], 1) for o in plan["options"]}
+        path_eval = plan.get("paths")
+        if path_eval is not None:
+            path_eval["combined"] = {
+                f"{o['col']},{o['row']}": round(o["combined"], 1)
+                for o in plan["options"]
+                if o.get("combined") is not None
+            }
+            path_eval["reason"] = plan["reason"]
         res = wb.call("wb.travel", {"col": choice["col"], "row": choice["row"]})
         v = res["view"]
         entry = {

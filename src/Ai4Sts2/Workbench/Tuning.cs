@@ -129,6 +129,46 @@ public static class Tuning
 
     public static int EliteTurns { get; set; } = 8;
 
+    public static int RouteMonster { get; set; } = 30;
+
+    public static int RouteElite { get; set; } = 110;
+
+    public static int RouteEliteMinHp { get; set; } = 55;
+
+    public static int RouteElitePenalty { get; set; } = 150;
+
+    public static int RouteUnknown { get; set; } = 25;
+
+    public static int RouteShop { get; set; } = 20;
+
+    public static int RouteShopPoor { get; set; } = 5;
+
+    public static int RouteShopGold { get; set; } = 120;
+
+    public static int RouteTreasure { get; set; } = 90;
+
+    public static int RouteRestFull { get; set; } = 35;
+
+    public static int RouteRestHeal { get; set; } = 60;
+
+    public static int RouteRestBelow { get; set; } = 70;
+
+    public static int RouteRestAmount { get; set; } = 30;
+
+    public static int RouteLossMonster { get; set; } = 8;
+
+    public static int RouteLossElite { get; set; } = 22;
+
+    public static int RouteLossUnknown { get; set; } = 3;
+
+    public static int RouteDanger { get; set; } = 15;
+
+    public static int RouteDangerPenalty { get; set; } = 500;
+
+    public static int RouteHpValue { get; set; } = 250;
+
+    public static int RouteFuture { get; set; } = 3;
+
     private static readonly Knobs _knobs = new(typeof(Tuning));
 
     public static Dictionary<string, object?> Apply(JsonElement? args, bool reset) => _knobs.Apply(args, reset);

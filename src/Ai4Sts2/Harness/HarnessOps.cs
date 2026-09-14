@@ -100,6 +100,7 @@ public static class HarnessOps
             "wb.evalrelic" => Result(WorkbenchEvalRelic(request.Args)),
             "wb.evaladd" => Result(WorkbenchEvalAdd(request.Args)),
             "wb.evalpath" => Result(WorkbenchEvalPath(request.Args)),
+            "wb.route" => Result(WorkbenchRoute(request.Args)),
             "wb.evalevent" => Result(WorkbenchEvalEvent(request.Args)),
             "wb.evalshop" => Result(WorkbenchEvalShop(request.Args)),
             "wb.autoplay" => Result(WorkbenchAutoplay(request.Args)),
@@ -665,6 +666,18 @@ public static class HarnessOps
             a.TryGetProperty("player", out var rp) ? rp.GetInt32() : 0
         );
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchRoute(JsonElement? args)
+    {
+        var a = args ?? new JsonElement();
+        var paths = a.ValueKind == JsonValueKind.Object && a.TryGetProperty("paths", out var p) && p.GetBoolean();
+        var maxTurns =
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m)
+                ? m.GetInt32()
+                : Tuning.MaxTurns;
+        var plan = RoutePlanner.Plan(Session.Instance, SearchOptionsFrom(a), maxTurns, paths);
+        return new { Plan = plan, View = Session.Instance.Flow.View() };
     }
 
     private static object WorkbenchEvalPath(JsonElement? args)
