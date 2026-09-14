@@ -301,28 +301,33 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
         _nodes++;
         var open = _nodes < _budget && _nodes < _totalBudget;
         var actions = depth < options.MaxDepth && open ? domain.Actions() : [];
-        var bestScore = double.NegativeInfinity;
-        var best = bestLine;
         Snapshot? snap = null;
+        var bestScore = Leaf(path, candidates, ref snap, out var best);
+        _leaves++;
         if (actions.Count > 0)
         {
-            snap = TakeSnapshot();
+            snap ??= TakeSnapshot();
+            var dirty = false;
             foreach (var action in actions)
             {
                 if (_nodes >= _budget || _nodes >= _totalBudget)
                 {
                     break;
                 }
+                if (dirty)
+                {
+                    RestoreSnapshot(snap);
+                }
                 Apply(action);
+                dirty = true;
                 var variants = domain.Variants(action);
                 path.Add(action);
                 var score = Explore(depth + 1, path, candidates, out var line);
                 path.RemoveAt(path.Count - 1);
-                RestoreSnapshot(snap);
                 if (score > bestScore)
                 {
                     bestScore = score;
-                    best = line;
+                    best = (List<TAction>)line;
                 }
                 foreach (var variant in variants)
                 {
@@ -330,27 +335,20 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                     {
                         break;
                     }
+                    RestoreSnapshot(snap);
                     Apply(variant);
                     path.Add(variant);
                     var alt = Explore(depth + 1, path, candidates, out var altLine);
                     path.RemoveAt(path.Count - 1);
-                    RestoreSnapshot(snap);
                     if (alt > bestScore)
                     {
                         bestScore = alt;
-                        best = altLine;
+                        best = (List<TAction>)altLine;
                     }
                 }
             }
         }
-        var leaf = Leaf(path, candidates, ref snap, out var closed);
         snap?.Release();
-        _leaves++;
-        if (leaf > bestScore)
-        {
-            bestScore = leaf;
-            best = closed;
-        }
         _table[key] = bestScore;
         bestLine = best;
         return bestScore;
