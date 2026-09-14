@@ -1,0 +1,1532 @@
+{
+ "DEFECT": {
+  "ADAPTIVE_STRIKE": {
+   "offered": 2,
+   "prior": 0.741,
+   "taken": 1
+  },
+  "BALL_LIGHTNING": {
+   "offered": 17,
+   "prior": -0.041,
+   "taken": 3
+  },
+  "BARRAGE": {
+   "offered": 12,
+   "prior": 0.217,
+   "taken": 1
+  },
+  "BEAM_CELL": {
+   "offered": 27,
+   "prior": 0.576,
+   "taken": 14
+  },
+  "BOOST_AWAY": {
+   "offered": 29,
+   "prior": -0.52,
+   "taken": 9
+  },
+  "BOOT_SEQUENCE": {
+   "offered": 9,
+   "prior": 1.437,
+   "taken": 3
+  },
+  "CHARGE_BATTERY": {
+   "offered": 32,
+   "prior": -1.714,
+   "taken": 8
+  },
+  "CHILL": {
+   "offered": 9,
+   "prior": -1.444,
+   "taken": 5
+  },
+  "CLAW": {
+   "offered": 31,
+   "prior": 0.303,
+   "taken": 3
+  },
+  "COLD_SNAP": {
+   "offered": 24,
+   "prior": 0.241,
+   "taken": 11
+  },
+  "COMPILE_DRIVER": {
+   "offered": 23,
+   "prior": 0.449,
+   "taken": 6
+  },
+  "CONSUMING_SHADOW": {
+   "offered": 5,
+   "prior": 0.889,
+   "taken": 3
+  },
+  "COOLANT": {
+   "offered": 9,
+   "prior": -2.333,
+   "taken": 3
+  },
+  "COOLHEADED": {
+   "offered": 15,
+   "prior": -0.816,
+   "taken": 1
+  },
+  "DARKNESS": {
+   "offered": 14,
+   "prior": 0.437,
+   "taken": 4
+  },
+  "DEFRAGMENT": {
+   "offered": 6,
+   "prior": 0.769,
+   "taken": 1
+  },
+  "DOUBLE_ENERGY": {
+   "offered": 12,
+   "prior": 0.165,
+   "taken": 2
+  },
+  "ECHO_FORM": {
+   "offered": 11,
+   "prior": -0.365,
+   "taken": 1
+  },
+  "FIGHT_THROUGH": {
+   "offered": 9,
+   "prior": 0.394,
+   "taken": 2
+  },
+  "FLAK_CANNON": {
+   "offered": 2,
+   "prior": 0.841,
+   "taken": 1
+  },
+  "FOCUSED_STRIKE": {
+   "offered": 25,
+   "prior": -1.081,
+   "taken": 7
+  },
+  "FTL": {
+   "offered": 15,
+   "prior": 1.972,
+   "taken": 4
+  },
+  "FUSION": {
+   "offered": 14,
+   "prior": 0.721,
+   "taken": 4
+  },
+  "GLASSWORK": {
+   "offered": 10,
+   "prior": 3.833,
+   "taken": 4
+  },
+  "GO_FOR_THE_EYES": {
+   "offered": 45,
+   "prior": 1.728,
+   "taken": 19
+  },
+  "GUNK_UP": {
+   "offered": 36,
+   "prior": 3.061,
+   "taken": 12
+  },
+  "HAILSTORM": {
+   "offered": 7,
+   "prior": 0.367,
+   "taken": 3
+  },
+  "HELIX_DRILL": {
+   "offered": 6,
+   "prior": -0.503,
+   "taken": 1
+  },
+  "HOLOGRAM": {
+   "offered": 23,
+   "prior": 0.522,
+   "taken": 5
+  },
+  "HOTFIX": {
+   "offered": 23,
+   "prior": -0.901,
+   "taken": 6
+  },
+  "HYPERBEAM": {
+   "offered": 3,
+   "prior": -0.657,
+   "taken": 1
+  },
+  "ICE_LANCE": {
+   "offered": 5,
+   "prior": -0.086,
+   "taken": 3
+  },
+  "LEAP": {
+   "offered": 22,
+   "prior": -0.819,
+   "taken": 6
+  },
+  "LIGHTNING_ROD": {
+   "offered": 12,
+   "prior": 0.259,
+   "taken": 3
+  },
+  "LOOP": {
+   "offered": 10,
+   "prior": -0.505,
+   "taken": 2
+  },
+  "METEOR_STRIKE": {
+   "offered": 9,
+   "prior": 0.019,
+   "taken": 1
+  },
+  "MOMENTUM_STRIKE": {
+   "offered": 23,
+   "prior": -2.741,
+   "taken": 8
+  },
+  "MULTI_CAST": {
+   "offered": 8,
+   "prior": 0.078,
+   "taken": 1
+  },
+  "NULL": {
+   "offered": 17,
+   "prior": -0.518,
+   "taken": 6
+  },
+  "OVERCLOCK": {
+   "offered": 7,
+   "prior": 0.598,
+   "taken": 1
+  },
+  "RAINBOW": {
+   "offered": 4,
+   "prior": 0.95,
+   "taken": 2
+  },
+  "REBOOT": {
+   "offered": 4,
+   "prior": 1.017,
+   "taken": 2
+  },
+  "REFRACT": {
+   "offered": 8,
+   "prior": -1.953,
+   "taken": 3
+  },
+  "ROCKET_PUNCH": {
+   "offered": 10,
+   "prior": -1.414,
+   "taken": 2
+  },
+  "SCAVENGE": {
+   "offered": 9,
+   "prior": -0.794,
+   "taken": 2
+  },
+  "SCRAPE": {
+   "offered": 13,
+   "prior": 0.14,
+   "taken": 5
+  },
+  "SHADOW_SHIELD": {
+   "offered": 3,
+   "prior": -0.343,
+   "taken": 1
+  },
+  "SHATTER": {
+   "offered": 2,
+   "prior": 0.352,
+   "taken": 1
+  },
+  "SIGNAL_BOOST": {
+   "offered": 6,
+   "prior": -0.622,
+   "taken": 1
+  },
+  "SKIM": {
+   "offered": 13,
+   "prior": -1.14,
+   "taken": 1
+  },
+  "SMOKESTACK": {
+   "offered": 7,
+   "prior": -0.673,
+   "taken": 2
+  },
+  "SPINNER": {
+   "offered": 6,
+   "prior": 1.28,
+   "taken": 3
+  },
+  "STORM": {
+   "offered": 7,
+   "prior": 1.117,
+   "taken": 2
+  },
+  "SUBROUTINE": {
+   "offered": 13,
+   "prior": 0.222,
+   "taken": 2
+  },
+  "SUNDER": {
+   "offered": 7,
+   "prior": 2.445,
+   "taken": 2
+  },
+  "SUPERCRITICAL": {
+   "offered": 7,
+   "prior": -0.553,
+   "taken": 2
+  },
+  "SWEEPING_BEAM": {
+   "offered": 29,
+   "prior": -0.215,
+   "taken": 6
+  },
+  "SYNCHRONIZE": {
+   "offered": 5,
+   "prior": 0.639,
+   "taken": 1
+  },
+  "SYNTHESIS": {
+   "offered": 12,
+   "prior": 0.647,
+   "taken": 1
+  },
+  "TEMPEST": {
+   "offered": 12,
+   "prior": -0.71,
+   "taken": 5
+  },
+  "TESLA_COIL": {
+   "offered": 3,
+   "prior": -0.833,
+   "taken": 2
+  },
+  "THUNDER": {
+   "offered": 3,
+   "prior": 0.531,
+   "taken": 1
+  },
+  "TURBO": {
+   "offered": 25,
+   "prior": 0.99,
+   "taken": 5
+  },
+  "UPROAR": {
+   "offered": 21,
+   "prior": 2.239,
+   "taken": 7
+  },
+  "VOLTAIC": {
+   "offered": 4,
+   "prior": -0.88,
+   "taken": 1
+  },
+  "WHITE_NOISE": {
+   "offered": 6,
+   "prior": 1.912,
+   "taken": 3
+  }
+ },
+ "IRONCLAD": {
+  "AGGRESSION": {
+   "offered": 20,
+   "prior": -0.288,
+   "taken": 6
+  },
+  "ANGER": {
+   "offered": 242,
+   "prior": 0.818,
+   "taken": 111
+  },
+  "ARMAMENTS": {
+   "offered": 205,
+   "prior": -1.056,
+   "taken": 44
+  },
+  "ASHEN_STRIKE": {
+   "offered": 52,
+   "prior": 1.745,
+   "taken": 10
+  },
+  "BARRICADE": {
+   "offered": 23,
+   "prior": -0.536,
+   "taken": 4
+  },
+  "BATTLE_TRANCE": {
+   "offered": 112,
+   "prior": -0.598,
+   "taken": 40
+  },
+  "BLOODLETTING": {
+   "offered": 118,
+   "prior": -2.339,
+   "taken": 25
+  },
+  "BLOOD_WALL": {
+   "offered": 213,
+   "prior": 1.696,
+   "taken": 48
+  },
+  "BLUDGEON": {
+   "offered": 107,
+   "prior": 2.155,
+   "taken": 35
+  },
+  "BODY_SLAM": {
+   "offered": 211,
+   "prior": -2.638,
+   "taken": 40
+  },
+  "BRAND": {
+   "offered": 29,
+   "prior": -3.217,
+   "taken": 5
+  },
+  "BREAKTHROUGH": {
+   "offered": 264,
+   "prior": -0.265,
+   "taken": 83
+  },
+  "BULLY": {
+   "offered": 92,
+   "prior": -2.394,
+   "taken": 36
+  },
+  "BURNING_PACT": {
+   "offered": 50,
+   "prior": -2.268,
+   "taken": 13
+  },
+  "CASCADE": {
+   "offered": 37,
+   "prior": -1.692,
+   "taken": 12
+  },
+  "CINDER": {
+   "offered": 231,
+   "prior": 1.292,
+   "taken": 62
+  },
+  "COLOSSUS": {
+   "offered": 80,
+   "prior": -1.352,
+   "taken": 14
+  },
+  "CONFLAGRATION": {
+   "offered": 46,
+   "prior": 0.854,
+   "taken": 22
+  },
+  "CRIMSON_MANTLE": {
+   "offered": 47,
+   "prior": -0.573,
+   "taken": 4
+  },
+  "CRUELTY": {
+   "offered": 53,
+   "prior": -2.212,
+   "taken": 4
+  },
+  "DARK_EMBRACE": {
+   "offered": 38,
+   "prior": 1.179,
+   "taken": 6
+  },
+  "DEMONIC_SHIELD": {
+   "offered": 2,
+   "prior": -1.352,
+   "taken": 1
+  },
+  "DEMON_FORM": {
+   "offered": 89,
+   "prior": 0.5,
+   "taken": 6
+  },
+  "DISMANTLE": {
+   "offered": 130,
+   "prior": 2.124,
+   "taken": 37
+  },
+  "DOMINATE": {
+   "offered": 13,
+   "prior": 0.582,
+   "taken": 6
+  },
+  "DRUM_OF_BATTLE": {
+   "offered": 48,
+   "prior": -0.279,
+   "taken": 5
+  },
+  "EVIL_EYE": {
+   "offered": 139,
+   "prior": -1.167,
+   "taken": 39
+  },
+  "EXPECT_A_FIGHT": {
+   "offered": 88,
+   "prior": -1.319,
+   "taken": 12
+  },
+  "FEED": {
+   "offered": 26,
+   "prior": 0.541,
+   "taken": 7
+  },
+  "FEEL_NO_PAIN": {
+   "offered": 42,
+   "prior": -0.356,
+   "taken": 5
+  },
+  "FIEND_FIRE": {
+   "offered": 30,
+   "prior": 4.361,
+   "taken": 11
+  },
+  "FIGHT_ME": {
+   "offered": 85,
+   "prior": 1.952,
+   "taken": 31
+  },
+  "FLAME_BARRIER": {
+   "offered": 79,
+   "prior": -0.831,
+   "taken": 15
+  },
+  "FORGOTTEN_RITUAL": {
+   "offered": 31,
+   "prior": -3.084,
+   "taken": 6
+  },
+  "HAVOC": {
+   "offered": 174,
+   "prior": -0.883,
+   "taken": 45
+  },
+  "HEADBUTT": {
+   "offered": 180,
+   "prior": -1.957,
+   "taken": 39
+  },
+  "HELLRAISER": {
+   "offered": 21,
+   "prior": -0.88,
+   "taken": 2
+  },
+  "HEMOKINESIS": {
+   "offered": 88,
+   "prior": -0.638,
+   "taken": 25
+  },
+  "HOWL_FROM_BEYOND": {
+   "offered": 117,
+   "prior": 0.207,
+   "taken": 45
+  },
+  "IMPERVIOUS": {
+   "offered": 32,
+   "prior": 0.658,
+   "taken": 1
+  },
+  "INFERNAL_BLADE": {
+   "offered": 68,
+   "prior": -1.285,
+   "taken": 23
+  },
+  "INFERNO": {
+   "offered": 51,
+   "prior": 2.015,
+   "taken": 20
+  },
+  "INFLAME": {
+   "offered": 133,
+   "prior": 0.263,
+   "taken": 27
+  },
+  "IRON_WAVE": {
+   "offered": 208,
+   "prior": -0.071,
+   "taken": 57
+  },
+  "JUGGERNAUT": {
+   "offered": 27,
+   "prior": -1.078,
+   "taken": 3
+  },
+  "JUGGLING": {
+   "offered": 93,
+   "prior": -0.426,
+   "taken": 13
+  },
+  "MANGLE": {
+   "offered": 39,
+   "prior": -3.68,
+   "taken": 6
+  },
+  "MOLTEN_FIST": {
+   "offered": 141,
+   "prior": 0.513,
+   "taken": 38
+  },
+  "NOT_YET": {
+   "offered": 29,
+   "prior": -0.164,
+   "taken": 7
+  },
+  "OFFERING": {
+   "offered": 33,
+   "prior": 2.061,
+   "taken": 14
+  },
+  "ONE_TWO_PUNCH": {
+   "offered": 36,
+   "prior": -2.614,
+   "taken": 10
+  },
+  "OUTRAGE": {
+   "offered": 2,
+   "prior": -0.707,
+   "taken": 1
+  },
+  "PACTS_END": {
+   "offered": 26,
+   "prior": -2.158,
+   "taken": 7
+  },
+  "PERFECTED_STRIKE": {
+   "offered": 230,
+   "prior": -1.141,
+   "taken": 51
+  },
+  "PILLAGE": {
+   "offered": 76,
+   "prior": -1.587,
+   "taken": 24
+  },
+  "POMMEL_STRIKE": {
+   "offered": 210,
+   "prior": -0.418,
+   "taken": 36
+  },
+  "PRIMAL_FORCE": {
+   "offered": 59,
+   "prior": 1.466,
+   "taken": 34
+  },
+  "PYRE": {
+   "offered": 80,
+   "prior": 1.686,
+   "taken": 10
+  },
+  "RAGE": {
+   "offered": 98,
+   "prior": -0.716,
+   "taken": 34
+  },
+  "RAMPAGE": {
+   "offered": 97,
+   "prior": 1.65,
+   "taken": 31
+  },
+  "RUPTURE": {
+   "offered": 84,
+   "prior": -1.912,
+   "taken": 12
+  },
+  "SECOND_WIND": {
+   "offered": 73,
+   "prior": 1.913,
+   "taken": 17
+  },
+  "SETUP_STRIKE": {
+   "offered": 272,
+   "prior": 0.291,
+   "taken": 59
+  },
+  "SHRUG_IT_OFF": {
+   "offered": 218,
+   "prior": 0.894,
+   "taken": 49
+  },
+  "SPITE": {
+   "offered": 94,
+   "prior": -0.199,
+   "taken": 40
+  },
+  "STAMPEDE": {
+   "offered": 87,
+   "prior": -2.204,
+   "taken": 16
+  },
+  "STOKE": {
+   "offered": 38,
+   "prior": 0.406,
+   "taken": 7
+  },
+  "STOMP": {
+   "offered": 99,
+   "prior": -0.535,
+   "taken": 40
+  },
+  "STONE_ARMOR": {
+   "offered": 77,
+   "prior": -2.099,
+   "taken": 10
+  },
+  "SWORD_BOOMERANG": {
+   "offered": 166,
+   "prior": 0.099,
+   "taken": 39
+  },
+  "TAUNT": {
+   "offered": 162,
+   "prior": 1.292,
+   "taken": 42
+  },
+  "TEAR_ASUNDER": {
+   "offered": 39,
+   "prior": -1.497,
+   "taken": 12
+  },
+  "THRASH": {
+   "offered": 86,
+   "prior": 0.305,
+   "taken": 19
+  },
+  "THUNDERCLAP": {
+   "offered": 214,
+   "prior": 1.155,
+   "taken": 42
+  },
+  "TREMBLE": {
+   "offered": 306,
+   "prior": 0.442,
+   "taken": 95
+  },
+  "TRUE_GRIT": {
+   "offered": 259,
+   "prior": -1.367,
+   "taken": 43
+  },
+  "TWIN_STRIKE": {
+   "offered": 172,
+   "prior": -0.498,
+   "taken": 42
+  },
+  "UNMOVABLE": {
+   "offered": 29,
+   "prior": 0.875,
+   "taken": 5
+  },
+  "UNRELENTING": {
+   "offered": 71,
+   "prior": -1.329,
+   "taken": 36
+  },
+  "UPPERCUT": {
+   "offered": 99,
+   "prior": -0.283,
+   "taken": 18
+  },
+  "VICIOUS": {
+   "offered": 26,
+   "prior": 0.154,
+   "taken": 5
+  },
+  "WHIRLWIND": {
+   "offered": 128,
+   "prior": 1.743,
+   "taken": 49
+  }
+ },
+ "NECROBINDER": {
+  "AFTERLIFE": {
+   "offered": 15,
+   "prior": 1.17,
+   "taken": 3
+  },
+  "BLIGHT_STRIKE": {
+   "offered": 5,
+   "prior": -0.565,
+   "taken": 1
+  },
+  "BORROWED_TIME": {
+   "offered": 4,
+   "prior": -1.056,
+   "taken": 1
+  },
+  "CALCIFY": {
+   "offered": 5,
+   "prior": -1.137,
+   "taken": 1
+  },
+  "CAPTURE_SPIRIT": {
+   "offered": 10,
+   "prior": -0.501,
+   "taken": 1
+  },
+  "CLEANSE": {
+   "offered": 3,
+   "prior": 0.528,
+   "taken": 1
+  },
+  "COUNTDOWN": {
+   "offered": 6,
+   "prior": 0.028,
+   "taken": 1
+  },
+  "DANSE_MACABRE": {
+   "offered": 7,
+   "prior": -0.143,
+   "taken": 2
+  },
+  "DEATHS_DOOR": {
+   "offered": 11,
+   "prior": -1.141,
+   "taken": 4
+  },
+  "DEATH_MARCH": {
+   "offered": 8,
+   "prior": 0.746,
+   "taken": 3
+  },
+  "DEBILITATE": {
+   "offered": 7,
+   "prior": 0.776,
+   "taken": 1
+  },
+  "DEFILE": {
+   "offered": 12,
+   "prior": -0.224,
+   "taken": 1
+  },
+  "DEFY": {
+   "offered": 20,
+   "prior": 2.135,
+   "taken": 7
+  },
+  "DIRGE": {
+   "offered": 7,
+   "prior": 2.409,
+   "taken": 3
+  },
+  "DRAIN_POWER": {
+   "offered": 16,
+   "prior": -0.975,
+   "taken": 3
+  },
+  "DREDGE": {
+   "offered": 4,
+   "prior": 0.133,
+   "taken": 2
+  },
+  "ENFEEBLING_TOUCH": {
+   "offered": 4,
+   "prior": -0.12,
+   "taken": 3
+  },
+  "FEAR": {
+   "offered": 19,
+   "prior": -0.475,
+   "taken": 8
+  },
+  "FETCH": {
+   "offered": 12,
+   "prior": 0.138,
+   "taken": 1
+  },
+  "FLATTEN": {
+   "offered": 18,
+   "prior": -0.019,
+   "taken": 5
+  },
+  "FRIENDSHIP": {
+   "offered": 13,
+   "prior": -0.837,
+   "taken": 2
+  },
+  "GRAVEBLAST": {
+   "offered": 14,
+   "prior": -0.526,
+   "taken": 6
+  },
+  "GRAVE_WARDEN": {
+   "offered": 8,
+   "prior": -0.589,
+   "taken": 2
+  },
+  "HIGH_FIVE": {
+   "offered": 5,
+   "prior": 0.324,
+   "taken": 1
+  },
+  "INVOKE": {
+   "offered": 16,
+   "prior": 0.587,
+   "taken": 3
+  },
+  "LETHALITY": {
+   "offered": 8,
+   "prior": -1.656,
+   "taken": 3
+  },
+  "MELANCHOLY": {
+   "offered": 5,
+   "prior": 0.9,
+   "taken": 2
+  },
+  "NECRO_MASTERY": {
+   "offered": 2,
+   "prior": -0.352,
+   "taken": 1
+  },
+  "NEUROSURGE": {
+   "offered": 3,
+   "prior": 0.126,
+   "taken": 2
+  },
+  "PARSE": {
+   "offered": 8,
+   "prior": -2.016,
+   "taken": 1
+  },
+  "POKE": {
+   "offered": 21,
+   "prior": 0.84,
+   "taken": 10
+  },
+  "PULL_AGGRO": {
+   "offered": 11,
+   "prior": -0.754,
+   "taken": 3
+  },
+  "PULL_FROM_BELOW": {
+   "offered": 8,
+   "prior": -0.677,
+   "taken": 1
+  },
+  "PUTREFY": {
+   "offered": 5,
+   "prior": -0.136,
+   "taken": 2
+  },
+  "RATTLE": {
+   "offered": 12,
+   "prior": 2.067,
+   "taken": 4
+  },
+  "REAP": {
+   "offered": 11,
+   "prior": 0.193,
+   "taken": 1
+  },
+  "REAVE": {
+   "offered": 13,
+   "prior": 0.946,
+   "taken": 6
+  },
+  "RIGHT_HAND_HAND": {
+   "offered": 7,
+   "prior": 0.183,
+   "taken": 3
+  },
+  "SACRIFICE": {
+   "offered": 4,
+   "prior": 0.384,
+   "taken": 3
+  },
+  "SCULPTING_STRIKE": {
+   "offered": 16,
+   "prior": 0.525,
+   "taken": 4
+  },
+  "SEANCE": {
+   "offered": 2,
+   "prior": 0.5,
+   "taken": 1
+  },
+  "SENTRY_MODE": {
+   "offered": 2,
+   "prior": -0.569,
+   "taken": 1
+  },
+  "SHROUD": {
+   "offered": 8,
+   "prior": -0.056,
+   "taken": 1
+  },
+  "SOW": {
+   "offered": 12,
+   "prior": 0.98,
+   "taken": 3
+  },
+  "SQUEEZE": {
+   "offered": 5,
+   "prior": 0.09,
+   "taken": 2
+  },
+  "THE_SCYTHE": {
+   "offered": 4,
+   "prior": 0.763,
+   "taken": 3
+  },
+  "UNDEATH": {
+   "offered": 2,
+   "prior": 1.111,
+   "taken": 1
+  },
+  "VEILPIERCER": {
+   "offered": 5,
+   "prior": 0.496,
+   "taken": 1
+  },
+  "WISP": {
+   "offered": 11,
+   "prior": 1.529,
+   "taken": 5
+  }
+ },
+ "REGENT": {
+  "ALIGNMENT": {
+   "offered": 6,
+   "prior": 0.8,
+   "taken": 2
+  },
+  "ASTRAL_PULSE": {
+   "offered": 12,
+   "prior": -2.42,
+   "taken": 2
+  },
+  "BEGONE": {
+   "offered": 8,
+   "prior": -0.256,
+   "taken": 1
+  },
+  "BIG_BANG": {
+   "offered": 2,
+   "prior": -0.481,
+   "taken": 1
+  },
+  "BLACK_HOLE": {
+   "offered": 3,
+   "prior": 1.083,
+   "taken": 1
+  },
+  "BOMBARDMENT": {
+   "offered": 3,
+   "prior": 0.324,
+   "taken": 2
+  },
+  "BULWARK": {
+   "offered": 6,
+   "prior": -0.306,
+   "taken": 2
+  },
+  "BUNDLE_OF_JOY": {
+   "offered": 3,
+   "prior": 1.078,
+   "taken": 1
+  },
+  "CELESTIAL_MIGHT": {
+   "offered": 11,
+   "prior": 0.425,
+   "taken": 7
+  },
+  "CHARGE": {
+   "offered": 6,
+   "prior": -0.267,
+   "taken": 1
+  },
+  "CHILD_OF_THE_STARS": {
+   "offered": 6,
+   "prior": -1.069,
+   "taken": 1
+  },
+  "CLOAK_OF_STARS": {
+   "offered": 21,
+   "prior": 2.092,
+   "taken": 5
+  },
+  "COLLISION_COURSE": {
+   "offered": 16,
+   "prior": 0.142,
+   "taken": 4
+  },
+  "CONVERGENCE": {
+   "offered": 9,
+   "prior": 0.777,
+   "taken": 1
+  },
+  "COSMIC_INDIFFERENCE": {
+   "offered": 14,
+   "prior": -0.465,
+   "taken": 3
+  },
+  "CRESCENT_SPEAR": {
+   "offered": 17,
+   "prior": 0.301,
+   "taken": 4
+  },
+  "CRUSH_UNDER": {
+   "offered": 9,
+   "prior": -1.86,
+   "taken": 6
+  },
+  "DECISIONS_DECISIONS": {
+   "offered": 8,
+   "prior": 0.516,
+   "taken": 1
+  },
+  "DEVASTATE": {
+   "offered": 7,
+   "prior": 0.343,
+   "taken": 2
+  },
+  "GATHER_LIGHT": {
+   "offered": 13,
+   "prior": 1.501,
+   "taken": 6
+  },
+  "GLIMMER": {
+   "offered": 8,
+   "prior": 1.143,
+   "taken": 3
+  },
+  "GLITTERSTREAM": {
+   "offered": 14,
+   "prior": 0.284,
+   "taken": 3
+  },
+  "GLOW": {
+   "offered": 25,
+   "prior": 1.929,
+   "taken": 3
+  },
+  "GUIDING_STAR": {
+   "offered": 15,
+   "prior": 0.242,
+   "taken": 4
+  },
+  "HEGEMONY": {
+   "offered": 5,
+   "prior": -1.542,
+   "taken": 1
+  },
+  "I_AM_INVINCIBLE": {
+   "offered": 4,
+   "prior": 1.135,
+   "taken": 1
+  },
+  "KINGLY_PUNCH": {
+   "offered": 5,
+   "prior": 1.614,
+   "taken": 2
+  },
+  "KNOCKOUT_BLOW": {
+   "offered": 4,
+   "prior": 0.086,
+   "taken": 1
+  },
+  "KNOW_THY_PLACE": {
+   "offered": 11,
+   "prior": -0.741,
+   "taken": 5
+  },
+  "MANIFEST_AUTHORITY": {
+   "offered": 6,
+   "prior": 0.783,
+   "taken": 2
+  },
+  "MONOLOGUE": {
+   "offered": 10,
+   "prior": -0.301,
+   "taken": 2
+  },
+  "ORBIT": {
+   "offered": 2,
+   "prior": -1.085,
+   "taken": 1
+  },
+  "PALE_BLUE_DOT": {
+   "offered": 7,
+   "prior": -0.225,
+   "taken": 1
+  },
+  "PARRY": {
+   "offered": 6,
+   "prior": -0.324,
+   "taken": 1
+  },
+  "PATTER": {
+   "offered": 10,
+   "prior": 0.666,
+   "taken": 2
+  },
+  "PHOTON_CUT": {
+   "offered": 7,
+   "prior": -1.575,
+   "taken": 3
+  },
+  "PROPHESIZE": {
+   "offered": 3,
+   "prior": 0.505,
+   "taken": 2
+  },
+  "QUASAR": {
+   "offered": 8,
+   "prior": -0.292,
+   "taken": 1
+  },
+  "RADIATE": {
+   "offered": 5,
+   "prior": -0.583,
+   "taken": 1
+  },
+  "REFINE_BLADE": {
+   "offered": 14,
+   "prior": -0.348,
+   "taken": 3
+  },
+  "REFLECT": {
+   "offered": 5,
+   "prior": 0.046,
+   "taken": 1
+  },
+  "RESONANCE": {
+   "offered": 9,
+   "prior": 0.508,
+   "taken": 1
+  },
+  "ROYAL_GAMBLE": {
+   "offered": 4,
+   "prior": -1.23,
+   "taken": 1
+  },
+  "SHINING_STRIKE": {
+   "offered": 3,
+   "prior": 0.5,
+   "taken": 1
+  },
+  "SOLAR_STRIKE": {
+   "offered": 14,
+   "prior": -0.926,
+   "taken": 6
+  },
+  "SPECTRUM_SHIFT": {
+   "offered": 7,
+   "prior": 0.927,
+   "taken": 2
+  },
+  "STARDUST": {
+   "offered": 7,
+   "prior": 1.495,
+   "taken": 2
+  },
+  "TERRAFORMING": {
+   "offered": 6,
+   "prior": -0.326,
+   "taken": 2
+  },
+  "WROUGHT_IN_WAR": {
+   "offered": 11,
+   "prior": -0.798,
+   "taken": 2
+  }
+ },
+ "SILENT": {
+  "ACROBATICS": {
+   "offered": 8,
+   "prior": 0.364,
+   "taken": 2
+  },
+  "AFTERIMAGE": {
+   "offered": 4,
+   "prior": 0.778,
+   "taken": 1
+  },
+  "ANTICIPATE": {
+   "offered": 21,
+   "prior": -0.064,
+   "taken": 5
+  },
+  "BACKFLIP": {
+   "offered": 15,
+   "prior": 1.472,
+   "taken": 7
+  },
+  "BACKSTAB": {
+   "offered": 7,
+   "prior": -0.582,
+   "taken": 5
+  },
+  "BLADE_DANCE": {
+   "offered": 25,
+   "prior": 0.28,
+   "taken": 9
+  },
+  "BLADE_OF_INK": {
+   "offered": 8,
+   "prior": 0.029,
+   "taken": 4
+  },
+  "BLUR": {
+   "offered": 16,
+   "prior": -0.354,
+   "taken": 2
+  },
+  "BUBBLE_BUBBLE": {
+   "offered": 13,
+   "prior": 0.864,
+   "taken": 2
+  },
+  "BULLET_TIME": {
+   "offered": 5,
+   "prior": -1.58,
+   "taken": 2
+  },
+  "CALCULATED_GAMBLE": {
+   "offered": 10,
+   "prior": -0.485,
+   "taken": 2
+  },
+  "CLOAK_AND_DAGGER": {
+   "offered": 27,
+   "prior": -1.041,
+   "taken": 10
+  },
+  "CORROSIVE_WAVE": {
+   "offered": 10,
+   "prior": -0.68,
+   "taken": 1
+  },
+  "DAGGER_SPRAY": {
+   "offered": 29,
+   "prior": 0.344,
+   "taken": 6
+  },
+  "DAGGER_THROW": {
+   "offered": 25,
+   "prior": -0.351,
+   "taken": 11
+  },
+  "DASH": {
+   "offered": 6,
+   "prior": 1.125,
+   "taken": 2
+  },
+  "DEADLY_POISON": {
+   "offered": 23,
+   "prior": 0.928,
+   "taken": 4
+  },
+  "DEFLECT": {
+   "offered": 18,
+   "prior": -0.225,
+   "taken": 5
+  },
+  "DODGE_AND_ROLL": {
+   "offered": 19,
+   "prior": 0.639,
+   "taken": 4
+  },
+  "ECHOING_SLASH": {
+   "offered": 6,
+   "prior": 0.227,
+   "taken": 3
+  },
+  "ENVENOM": {
+   "offered": 3,
+   "prior": -0.759,
+   "taken": 1
+  },
+  "ESCAPE_PLAN": {
+   "offered": 14,
+   "prior": -0.219,
+   "taken": 2
+  },
+  "EXPERTISE": {
+   "offered": 8,
+   "prior": -1.563,
+   "taken": 1
+  },
+  "EXPOSE": {
+   "offered": 3,
+   "prior": 2.111,
+   "taken": 1
+  },
+  "FAN_OF_KNIVES": {
+   "offered": 4,
+   "prior": 1.21,
+   "taken": 1
+  },
+  "FINISHER": {
+   "offered": 10,
+   "prior": -0.203,
+   "taken": 5
+  },
+  "FLECHETTES": {
+   "offered": 7,
+   "prior": 0.318,
+   "taken": 4
+  },
+  "FLICK_FLACK": {
+   "offered": 25,
+   "prior": 0.753,
+   "taken": 9
+  },
+  "FOOTWORK": {
+   "offered": 13,
+   "prior": -0.068,
+   "taken": 3
+  },
+  "GRAND_FINALE": {
+   "offered": 4,
+   "prior": -0.546,
+   "taken": 1
+  },
+  "HAND_TRICK": {
+   "offered": 13,
+   "prior": 0.103,
+   "taken": 4
+  },
+  "HAZE": {
+   "offered": 9,
+   "prior": -0.072,
+   "taken": 2
+  },
+  "HIDDEN_DAGGERS": {
+   "offered": 9,
+   "prior": -0.245,
+   "taken": 5
+  },
+  "LEADING_STRIKE": {
+   "offered": 35,
+   "prior": 0.286,
+   "taken": 6
+  },
+  "LEG_SWEEP": {
+   "offered": 10,
+   "prior": -0.773,
+   "taken": 3
+  },
+  "MEMENTO_MORI": {
+   "offered": 9,
+   "prior": 2.149,
+   "taken": 5
+  },
+  "MURDER": {
+   "offered": 8,
+   "prior": -0.052,
+   "taken": 1
+  },
+  "NOXIOUS_FUMES": {
+   "offered": 9,
+   "prior": 1.365,
+   "taken": 3
+  },
+  "OUTBREAK": {
+   "offered": 5,
+   "prior": 0.012,
+   "taken": 2
+  },
+  "PIERCING_WAIL": {
+   "offered": 27,
+   "prior": 0.952,
+   "taken": 9
+  },
+  "PINPOINT": {
+   "offered": 11,
+   "prior": 0.811,
+   "taken": 2
+  },
+  "POISONED_STAB": {
+   "offered": 21,
+   "prior": 0.907,
+   "taken": 7
+  },
+  "POUNCE": {
+   "offered": 14,
+   "prior": 0.829,
+   "taken": 8
+  },
+  "PRECISE_CUT": {
+   "offered": 9,
+   "prior": -0.548,
+   "taken": 4
+  },
+  "PREDATOR": {
+   "offered": 13,
+   "prior": -2.256,
+   "taken": 5
+  },
+  "PREPARED": {
+   "offered": 15,
+   "prior": -2.603,
+   "taken": 5
+  },
+  "REFLEX": {
+   "offered": 6,
+   "prior": 0.63,
+   "taken": 3
+  },
+  "RICOCHET": {
+   "offered": 17,
+   "prior": -2.581,
+   "taken": 5
+  },
+  "SERPENT_FORM": {
+   "offered": 3,
+   "prior": -0.833,
+   "taken": 1
+  },
+  "SKEWER": {
+   "offered": 15,
+   "prior": 0.343,
+   "taken": 8
+  },
+  "SLICE": {
+   "offered": 20,
+   "prior": -0.036,
+   "taken": 6
+  },
+  "SNAKEBITE": {
+   "offered": 19,
+   "prior": -0.437,
+   "taken": 3
+  },
+  "SPEEDSTER": {
+   "offered": 16,
+   "prior": 0.428,
+   "taken": 2
+  },
+  "STORM_OF_STEEL": {
+   "offered": 6,
+   "prior": 0.13,
+   "taken": 1
+  },
+  "SUCKER_PUNCH": {
+   "offered": 32,
+   "prior": -0.309,
+   "taken": 10
+  },
+  "THE_HUNT": {
+   "offered": 5,
+   "prior": 0.151,
+   "taken": 1
+  },
+  "UNTOUCHABLE": {
+   "offered": 17,
+   "prior": 0.168,
+   "taken": 1
+  },
+  "UP_MY_SLEEVE": {
+   "offered": 9,
+   "prior": 0.127,
+   "taken": 2
+  }
+ }
+}

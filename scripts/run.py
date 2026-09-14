@@ -1,4 +1,6 @@
 import argparse
+import json
+import os
 import time
 
 from harness import Harness, HarnessError
@@ -520,6 +522,7 @@ def main():
     ap.add_argument("--max-nodes", type=int, default=400)
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--tune", action="append", default=[])
+    ap.add_argument("--priors", default=os.path.join(os.path.dirname(__file__), "..", "metrics", "priors.json"))
     ap.add_argument("--max-depth", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=30)
     ap.add_argument("--beam", type=int, default=None)
@@ -563,6 +566,11 @@ def main():
         for k, _, v in (t.partition("=") for t in a.tune)
     }
     wb.call("wb.tune", {"reset": True, "Record": a.record, **tune})
+    priors = {}
+    if a.priors and os.path.exists(a.priors):
+        with open(a.priors, encoding="utf-8") as f:
+            priors = json.load(f).get(a.character, {})
+    wb.call("wb.priors", {"cards": priors})
     t0 = time.time()
     cases = []
     traces = []
@@ -599,6 +607,7 @@ def main():
             "bossTurns": a.boss_turns,
             "elite": a.elite,
             "tune": tune,
+            "priors": len(priors),
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
             "floors": sum(c["floors"] for c in cases),

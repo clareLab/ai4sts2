@@ -483,11 +483,39 @@ public static class Rollout
             score += (bossDamage * 3) + (after * 6) - (hpAfterFights * 6) + (won ? 3000 : 0);
             score -= alive ? 0 : 1500 + (2500.0 * remaining / Math.Max(1, bossMax));
         }
-        if (Tuning.UsageWeight > 0 && _rank is { } root)
+        if (_rank is { } root)
         {
-            score += Tuning.UsageWeight * Usage(session, run, root, playsBefore, fightsBefore);
+            if (Tuning.UsageWeight > 0)
+            {
+                score += Tuning.UsageWeight * Usage(session, run, root, playsBefore, fightsBefore);
+            }
+            if (Tuning.PriorWeight > 0 && session.Priors.Count > 0)
+            {
+                score += Tuning.PriorWeight * Prior(session, run, root);
+            }
         }
         return new RolloutSummary(fights, wins, lost, score, details, elite, boss, bossDamage);
+    }
+
+    private static double Prior(Session session, RunState run, Dictionary<CardModel, int> root)
+    {
+        var deck = run.Players.SelectMany(p => p.Deck.Cards).ToList();
+        double total = 0;
+        foreach (var card in deck)
+        {
+            if (!root.ContainsKey(card))
+            {
+                total += session.Priors.GetValueOrDefault(card.Id.Entry);
+            }
+        }
+        foreach (var (card, _) in root)
+        {
+            if (!deck.Contains(card))
+            {
+                total -= session.Priors.GetValueOrDefault(card.Id.Entry);
+            }
+        }
+        return total;
     }
 
     private static double Usage(

@@ -37,6 +37,8 @@ public static class Tuning
 
     public static int UsageWeight { get; set; } = 300;
 
+    public static int PriorWeight { get; set; } = 80;
+
     public static bool RatePricing { get; set; }
 
     public static bool RateDebuffs { get; set; }

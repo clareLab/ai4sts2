@@ -79,6 +79,7 @@ public static class HarnessOps
             "wb.view" => Result(WorkbenchView(request.Args)),
             "wb.map" => Result(Session.Instance.Flow.MapSnapshot()),
             "wb.tune" => Result(Tuning.Apply(request.Args)),
+            "wb.priors" => Result(WorkbenchPriors(request.Args)),
             "kernel.patches" => Result(Patches.Applied ? Patches.Statuses : Patches.Preview()),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
@@ -634,6 +635,23 @@ public static class HarnessOps
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty("maxTurns", out var m) ? m.GetInt32() : 30;
         var evaluation = Rollout.EvaluateEvent(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchPriors(JsonElement? args)
+    {
+        var priors = Session.Instance.Priors;
+        priors.Clear();
+        if (args is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("cards", out var cards))
+        {
+            foreach (var entry in cards.EnumerateObject())
+            {
+                priors[entry.Name] =
+                    entry.Value.ValueKind == JsonValueKind.Number ? entry.Value.GetDouble()
+                    : entry.Value.TryGetProperty("prior", out var p) ? p.GetDouble()
+                    : 0;
+            }
+        }
+        return new { Count = priors.Count };
     }
 
     private static object WorkbenchEvalAdd(JsonElement? args)
