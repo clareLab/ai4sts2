@@ -199,10 +199,10 @@ def evaluate(model, rows, fights, hold, a):
     }
 
 
-def contrast_groups(rows, fights, a, hold=None, side=None):
+def contrast_groups(rows, fights, a, hold=None, side=None, phase="contrast"):
     groups = {}
     for r in rows:
-        if r["phase"] != "contrast" or r["extra"] is None or r["extra"].get("truncated"):
+        if r["phase"] != phase or r["extra"] is None or r["extra"].get("truncated"):
             continue
         if hold is not None and (fold(r["run"]) == hold) != side:
             continue
@@ -214,8 +214,8 @@ def contrast_groups(rows, fights, a, hold=None, side=None):
     return {k: v for k, v in groups.items() if len(v) >= 2}
 
 
-def fit_contrast(rows, fights, a, hold=None):
-    groups = contrast_groups(rows, fights, a, hold, False)
+def fit_contrast(rows, fights, a, hold=None, phase="contrast"):
+    groups = contrast_groups(rows, fights, a, hold, False, phase)
     if len(groups) < 30:
         return None
     support = {}
@@ -242,8 +242,8 @@ def fit_contrast(rows, fights, a, hold=None):
     return {"names": names, "wc": w.tolist(), "groups": len(groups), "pairs": len(dy)}
 
 
-def contrast_accuracy(model, rows, fights, hold, a):
-    groups = contrast_groups(rows, fights, a, hold, True)
+def contrast_accuracy(model, rows, fights, hold, a, phase="contrast"):
+    groups = contrast_groups(rows, fights, a, hold, True, phase)
     index = {n: j for j, n in enumerate(model["names"])}
     w = np.array(model["wc"])
     counts = {"learned": 0, "hand": 0, "search": 0, "pairs": 0}
@@ -329,15 +329,21 @@ def main():
         full = fit_phase(phase_rows, fights, a)
         report[phase] = {"folds": folds, "model": full}
         print(phase, json.dumps({k: v for k, v in folds.items()}, ensure_ascii=False))
-    contrast = {}
-    for hold in range(3):
-        model = fit_contrast(rows, fights, a, hold)
-        if model is not None:
-            contrast[hold] = contrast_accuracy(model, rows, fights, hold, a)
-    contrast_full = fit_contrast(rows, fights, a)
-    if contrast:
-        print("contrast", json.dumps(contrast, ensure_ascii=False))
-        report["contrast"] = {"folds": contrast, "model": contrast_full}
+    contrast_full = None
+    heads = {}
+    for phase, source in (("leaf", "contrast"), ("start", "contrastStart")):
+        folds = {}
+        for hold in range(3):
+            model = fit_contrast(rows, fights, a, hold, source)
+            if model is not None:
+                folds[hold] = contrast_accuracy(model, rows, fights, hold, a, source)
+        full = fit_contrast(rows, fights, a, phase=source)
+        if folds:
+            print(source, json.dumps(folds, ensure_ascii=False))
+            report[source] = {"folds": folds, "model": full}
+        if full is not None:
+            heads[phase] = full
+            contrast_full = contrast_full or full
     models = {
         p: {k: v for k, v in report[p]["model"].items() if k != "index"}
         for p in PHASES
@@ -345,10 +351,12 @@ def main():
     }
     if not models:
         raise SystemExit("not enough labeled rows")
-    if contrast_full is not None and a.contrast:
+    if a.contrast:
         for p in models:
-            models[p]["contrastNames"] = contrast_full["names"]
-            models[p]["wc"] = contrast_full["wc"]
+            head = heads.get(p) or contrast_full
+            if head is not None:
+                models[p]["contrastNames"] = head["names"]
+                models[p]["wc"] = head["wc"]
     payload = {
         "game": meta.get("game"),
         "mod": meta.get("mod"),
@@ -367,7 +375,7 @@ def main():
         "runs": len(runs),
         "hash": digest,
         "metrics": {p: report[p]["folds"] for p in report},
-        "contrast": {"groups": contrast_full["groups"], "pairs": contrast_full["pairs"]} if contrast_full else None,
+        "contrast": {p: {"groups": h["groups"], "pairs": h["pairs"]} for p, h in heads.items()} or None,
         "names": {p: len(models[p]["names"]) for p in models},
         "replay": False,
     }

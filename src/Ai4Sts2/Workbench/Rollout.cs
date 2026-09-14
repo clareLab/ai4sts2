@@ -471,6 +471,7 @@ public static class Rollout
                     }
                     _ = domain.Apply(action);
                 }
+                var start = domain.Terminal ? null : new CombatDomain(session, false).Capture("start");
                 var extra = 0;
                 while (CombatManager.Instance.IsInProgress && extra < turnsLeft - 1)
                 {
@@ -488,22 +489,21 @@ public static class Rollout
                 }
                 var players = session.Run!.Players;
                 var alive = players.Any(p => p.Creature.IsAlive);
-                Harness.Recorder.Features(
-                    fightId,
-                    turn,
-                    "contrast",
-                    entry.Features,
-                    new
-                    {
-                        rank,
-                        est = entry.Estimate,
-                        real = entry.Real,
-                        won = !CombatManager.Instance.IsInProgress && alive,
-                        truncated = CombatManager.Instance.IsInProgress && alive,
-                        hpEnd = players.Sum(p => p.Creature.CurrentHp),
-                        turns = extra + 1,
-                    }
-                );
+                var outcome = new
+                {
+                    rank,
+                    est = entry.Estimate,
+                    real = entry.Real,
+                    won = !CombatManager.Instance.IsInProgress && alive,
+                    truncated = CombatManager.Instance.IsInProgress && alive,
+                    hpEnd = players.Sum(p => p.Creature.CurrentHp),
+                    turns = extra + 1,
+                };
+                Harness.Recorder.Features(fightId, turn, "contrast", entry.Features, outcome);
+                if (start is not null)
+                {
+                    Harness.Recorder.Features(fightId, turn, "contrastStart", start, outcome);
+                }
                 rank++;
             }
         }
