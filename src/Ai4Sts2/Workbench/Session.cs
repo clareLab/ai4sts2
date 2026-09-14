@@ -44,12 +44,24 @@ public sealed class FightStats
         Attacks = 0;
         Skills = 0;
     }
+
+    public FightStats Copy() => (FightStats)MemberwiseClone();
+
+    public void CopyFrom(FightStats other)
+    {
+        Turns = other.Turns;
+        Dealt = other.Dealt;
+        Block = other.Block;
+        HpLost = other.HpLost;
+        Attacks = other.Attacks;
+        Skills = other.Skills;
+    }
 }
 
 public sealed class Session
 {
     private const ulong LocalNetId = 1;
-    private readonly Dictionary<int, Snapshot> _snaps = [];
+    private readonly Dictionary<int, (Snapshot Snapshot, FightStats Fight)> _snaps = [];
     private int _snapSeq;
     private bool _appendedHistory;
     private IDisposable? _selectorScope;
@@ -308,15 +320,18 @@ public sealed class Session
     {
         var snap = Loader.Take();
         var id = ++_snapSeq;
-        _snaps[id] = snap;
+        _snaps[id] = (snap, Fight.Copy());
         return (id, snap);
     }
 
     public RestoreStats Restore(int id)
     {
-        return !_snaps.TryGetValue(id, out var snap)
-            ? throw new KeyNotFoundException($"snapshot {id} not found")
-            : Loader.Restore(snap, Pump);
+        if (!_snaps.TryGetValue(id, out var saved))
+        {
+            throw new KeyNotFoundException($"snapshot {id} not found");
+        }
+        Fight.CopyFrom(saved.Fight);
+        return Loader.Restore(saved.Snapshot, Pump);
     }
 
     public void DropSnapshots() => _snaps.Clear();
