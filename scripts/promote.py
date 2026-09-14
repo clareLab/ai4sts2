@@ -65,7 +65,7 @@ def main():
         or tune.wins_delta(cand, base, [u for u in keys if u in d]) < 0
         for keys in strata.values()
     )
-    ok = not inferior and mean > -0.5
+    ok = not inferior and mean > 0 and wins >= 0
     print(
         f"mean {mean:+.2f} HP/case, wins {wins:+d}, nodes x{ratio:.2f}, p_better {tune.p_signflip(list(d.values())):.3f}, {'PASS' if ok else 'FAIL'}{' (quality)' if verdict else ''}"
     )
