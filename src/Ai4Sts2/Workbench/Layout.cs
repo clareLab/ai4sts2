@@ -269,11 +269,15 @@ public sealed class Layout
                         (Snapshot.IsSource(f.FieldType) || !Snapshot.Skip(f.FieldType))
                         && !f.FieldType.IsPointer
                         && !f.FieldType.IsByRefLike
+                        && !(type.IsClass && f.IsInitOnly && Plain(f.FieldType))
                     )
             );
         }
         return list.ToArray();
     }
+
+    private static bool Plain(Type t) =>
+        t.IsValueType && (t.IsPrimitive || t.IsEnum || t == typeof(decimal) || Measure(t).Refs == 0);
 
     private static (int Bytes, int Refs) Measure(Type type)
     {
