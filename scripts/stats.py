@@ -123,6 +123,49 @@ def perf(tag=None, character=None, players=None, since=None):
         print(f"nodes/turn median {statistics.median(nodes):.0f} p90 {nodes[int(len(nodes) * 0.9) - 1]:.0f}")
 
 
+def progress(case):
+    floors = case.get("floors", 0)
+    if case.get("outcome") == "act-cleared":
+        return 60.0
+    hp = case.get("hpLeft") or 0
+    max_hp = case.get("maxHp") or 0
+    return floors + (hp / max_hp if max_hp and hp else 0.0)
+
+
+def compare(tag_a, tag_b):
+    from tune import p_signflip
+
+    keyed = {}
+    for (tag, character, players), cases in gather().items():
+        if tag not in (tag_a, tag_b):
+            continue
+        for case in cases:
+            if case.get("outcome") != "error":
+                keyed[(tag, character, players, case["seed"])] = case
+    rows = []
+    for (tag, character, players, seed), case in keyed.items():
+        if tag != tag_a:
+            continue
+        other = keyed.get((tag_b, character, players, seed))
+        if other is not None:
+            rows.append((character, progress(case), progress(other), case.get("floors", 0), other.get("floors", 0)))
+    if not rows:
+        print("no paired runs")
+        return
+    print(f"{'character':<12} {'n':>3} {tag_a:>10} {tag_b:>10} {'diff':>7} {'floors':>12} {'p':>6}")
+    for character in [*sorted({r[0] for r in rows}), None]:
+        part = [r for r in rows if character is None or r[0] == character]
+        diffs = [b - a for _, a, b, _, _ in part]
+        mean_a = statistics.mean(r[1] for r in part)
+        mean_b = statistics.mean(r[2] for r in part)
+        floors_a = statistics.mean(r[3] for r in part)
+        floors_b = statistics.mean(r[4] for r in part)
+        p = min(1.0, 2 * min(p_signflip(diffs), p_signflip([-d for d in diffs])))
+        print(
+            f"{character or 'ALL':<12} {len(part):>3} {mean_a:>10.2f} {mean_b:>10.2f} {mean_b - mean_a:>+7.2f} {floors_a:>5.1f}->{floors_b:<5.1f} {p:>6.3f}"
+        )
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag")
@@ -130,8 +173,13 @@ def main():
     ap.add_argument("--players", type=int)
     ap.add_argument("--since")
     ap.add_argument("--perf", action="store_true")
+    ap.add_argument("--compare", default="")
     a = ap.parse_args()
     character = a.character.upper() if a.character else None
+    if a.compare:
+        tag_a, tag_b = a.compare.split(",")
+        compare(tag_a, tag_b)
+        return
     report(a.tag, character, a.players, a.since)
     if a.perf:
         perf(a.tag, character, a.players, a.since)
