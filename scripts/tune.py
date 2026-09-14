@@ -175,6 +175,7 @@ class Runner:
         name = self.pool.get()
         if name not in self.clients:
             self.clients[name] = Harness(name, timeout=3600)
+            tuning.apply(self.clients[name])
         return name, self.clients[name]
 
     def cell(self, wb, cid, salt, config, snap_id=None):
@@ -343,7 +344,7 @@ def main():
             u = (case_id(c), s)
             (strata_h if fold[u[0]] == confirm_fold else strata_t).setdefault(stratum(c), []).append(u)
     inert = Inert(fingerprint)
-    space = [k for k in factory if k not in inert]
+    space = [k for k in factory if k not in inert and isinstance(factory[k], (bool, int))]
     if a.knobs:
         wanted = set(a.knobs.split(","))
         space = [k for k in space if k in wanted]

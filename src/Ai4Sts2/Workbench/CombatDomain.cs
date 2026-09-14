@@ -889,6 +889,10 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             }
             score = Tuning.TerminalWin;
         }
+        else if (ValueModel.Current is { } model)
+        {
+            return Learned(model, "start");
+        }
         if (Tuning.RatePricing)
         {
             Tempo(state);
@@ -963,8 +967,49 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return score;
     }
 
+    private double Learned(ValueModel model, string phase)
+    {
+        var state = State();
+        var features = Capture(phase);
+        double hp = 0;
+        double through = 0;
+        foreach (var (name, value) in features)
+        {
+            switch (name)
+            {
+                case "hp":
+                    hp = value;
+                    break;
+                case "through":
+                    through = value;
+                    break;
+                default:
+                    break;
+            }
+        }
+        var score = 100 * model.Value(phase, features, hp, Tuning.LossHp);
+        foreach (var player in state.Players)
+        {
+            if (!player.Creature.IsAlive)
+            {
+                score -= 100_000;
+                continue;
+            }
+            score += player.Potions.Sum(q => q.Id.Entry == "BLOCK_POTION" ? _blockPotionValue : _potionValue);
+        }
+        if (through >= hp && hp > 0)
+        {
+            score -= 100_000 + (Tuning.GradedLethal ? 200 * (through - hp) : 0);
+        }
+        return score;
+    }
+
     public double Estimate()
     {
+        if (!Terminal && ValueModel.Current is { } model)
+        {
+            return Learned(model, _atTurnStart ? "start" : "leaf");
+        }
         var state = State();
         var score = Evaluate();
         if (Terminal)

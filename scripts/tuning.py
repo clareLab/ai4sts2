@@ -21,8 +21,22 @@ def args(overrides=None, path=PATH):
     return {"reset": True, **load(path), **(overrides or {})}
 
 
-def apply(wb, overrides=None, path=PATH):
-    echo = wb.call("wb.tune", args(overrides, path))
+VALUE_PATH = os.path.join(os.path.dirname(PATH), "value.json")
+
+
+def value_hash(wb, path=VALUE_PATH):
+    if not os.path.exists(path):
+        return None
+    return wb.call("wb.value", {"path": os.path.abspath(path)})["hash"]
+
+
+def apply(wb, overrides=None, path=PATH, value_path=VALUE_PATH):
+    merged = dict(overrides or {})
+    if "Value" not in merged and "Value" not in load(path):
+        digest = value_hash(wb, value_path)
+        if digest:
+            merged["Value"] = digest
+    echo = wb.call("wb.tune", args(merged, path))
     known = {k.lower() for group in echo.values() if isinstance(group, dict) for k in group}
     unknown = [k for k in load(path) if k.lower() not in known]
     if unknown:

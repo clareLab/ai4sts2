@@ -81,6 +81,8 @@ public static class HarnessOps
             "wb.tune" => Result(WorkbenchTune(request.Args)),
             "wb.priors" => Result(WorkbenchPriors(request.Args)),
             "wb.record" => Result(WorkbenchRecord(request.Args)),
+            "wb.value" => Result(WorkbenchValue(request.Args)),
+            "wb.valbench" => Result(WorkbenchValueBench(request.Args)),
             "kernel.patches" => Result(Patches.Applied ? Patches.Statuses : Patches.Preview()),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
@@ -704,6 +706,55 @@ public static class HarnessOps
                 : Tuning.MaxTurns;
         var evaluation = Rollout.EvaluateEvent(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchValue(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var model = ValueModel.Load(a.GetProperty("path").GetString()!);
+        var known = ModelDb.All.OfType<PowerModel>().Select(m => m.Id.Entry).ToHashSet(StringComparer.Ordinal);
+        var unresolved = model
+            .Phases.Values.SelectMany(h => h.Names)
+            .Where(n => n.StartsWith("pp:", StringComparison.Ordinal) || n.StartsWith("ep:", StringComparison.Ordinal))
+            .Select(n => n[3..])
+            .Distinct()
+            .Count(id => !known.Contains(id));
+        return new
+        {
+            model.Hash,
+            model.Game,
+            Phases = model.Phases.ToDictionary(kv => kv.Key, kv => kv.Value.Count),
+            TrainedRuns = model.TrainedRuns.Count,
+            UnresolvedPowers = unresolved,
+        };
+    }
+
+    private static object WorkbenchValueBench(JsonElement? args)
+    {
+        var n = args is { ValueKind: JsonValueKind.Object } a && a.TryGetProperty("n", out var v) ? v.GetInt32() : 500;
+        var domain = new CombatDomain(Session.Instance);
+        var sw = Stopwatch.StartNew();
+        double sum = 0;
+        for (var i = 0; i < n; i++)
+        {
+            sum += domain.Estimate();
+        }
+        var micros = sw.Elapsed.TotalMicroseconds / Math.Max(1, n);
+        sw.Restart();
+        var features = 0;
+        for (var i = 0; i < n; i++)
+        {
+            features += domain.Capture("leaf").Count;
+        }
+        return new
+        {
+            N = n,
+            MicrosPerEstimate = micros,
+            MicrosPerCapture = sw.Elapsed.TotalMicroseconds / Math.Max(1, n),
+            Features = features / Math.Max(1, n),
+            Value = Tuning.Value,
+            Mean = sum / Math.Max(1, n),
+        };
     }
 
     private static object WorkbenchRecord(JsonElement? args)
