@@ -51,11 +51,11 @@ def run_path(run_id):
     return os.path.join(RUNS_DIR, run_id + ".json")
 
 
-def record(kind, summary, detail=None, versions=None):
+def record(kind, summary, detail=None, versions=None, run_id=None):
     os.makedirs(RUNS_DIR, exist_ok=True)
     migrate_if_needed()
     ts = now()
-    run_id = make_id(ts, kind)
+    run_id = run_id or make_id(ts, kind)
     versions = versions or {}
     row = {
         "schema": SCHEMA,

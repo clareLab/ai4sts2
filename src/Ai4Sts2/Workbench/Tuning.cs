@@ -169,6 +169,10 @@ public static class Tuning
 
     public static int RouteFuture { get; set; } = 3;
 
+    public static int LossHp { get; set; } = 60;
+
+    public static string Value { get; set; } = "hand";
+
     private static readonly Knobs _knobs = new(typeof(Tuning));
 
     public static Dictionary<string, object?> Apply(JsonElement? args, bool reset) => _knobs.Apply(args, reset);
@@ -183,6 +187,8 @@ public static class Modes
     public static bool StableShuffle { get; set; } = true;
 
     public static bool Record { get; set; } = Environment.GetEnvironmentVariable("AI4STS2_RECORD") == "1";
+
+    public static bool Dump { get; set; }
 
     private static readonly Knobs _knobs = new(typeof(Modes));
 
@@ -219,7 +225,8 @@ public sealed class Knobs(Type owner)
                     continue;
                 }
                 object value =
-                    property.PropertyType == typeof(bool)
+                    property.PropertyType == typeof(string) ? entry.Value.ToString()
+                    : property.PropertyType == typeof(bool)
                         ? entry.Value.ValueKind == JsonValueKind.True
                             || (entry.Value.ValueKind == JsonValueKind.String && entry.Value.GetString() == "true")
                     : entry.Value.ValueKind == JsonValueKind.Number ? entry.Value.GetInt32()

@@ -78,10 +78,11 @@ public static class Rollout
     public static (SearchResult<SearchAction> Result, IReadOnlyList<SearchAction> Line) SearchTurn(
         Session session,
         SearchOptions options,
-        bool coordinate
+        bool coordinate,
+        bool record = false
     )
     {
-        var domain = new CombatDomain(session) { CanonicalKeys = options.Canonical };
+        var domain = new CombatDomain(session) { CanonicalKeys = options.Canonical, Record = record };
         var (state, _) = Session.Current(0);
         if (!coordinate || state.Players.Count < 2)
         {
@@ -242,17 +243,39 @@ public static class Rollout
         {
             session.CardFights[card] = session.CardFights.GetValueOrDefault(card) + 1;
         }
-        var fightId = recording
-            ? Harness.Recorder.BeginFight(
-                Session.Current(0).State.Encounter?.Id.Entry ?? "?",
-                session.Run?.TotalFloor ?? 0,
-                null
-            )
-            : 0;
+        var fightId = 0;
+        if (recording)
+        {
+            var (start, _) = Session.Current(0);
+            var run = session.Run!;
+            fightId = Harness.Recorder.BeginFight(
+                new Harness.FightHeader(
+                    start.Encounter?.Id.Entry ?? "?",
+                    start.Encounter?.RoomType.ToString() ?? "?",
+                    run.TotalFloor,
+                    run.CurrentActIndex + 1,
+                    run.AscensionLevel,
+                    run.Players.Count,
+                    run.Players.Select(p => p.Character.Id.Entry).ToList(),
+                    maxTurns,
+                    hpStart,
+                    $"{options.MaxNodes}/{options.Beam}/{options.Turns}"
+                )
+            );
+        }
         using var suspended = Harness.Recorder.Suspend();
         while (CombatManager.Instance.IsInProgress && turns < maxTurns)
         {
-            var (result, chosen) = SearchTurn(session, options, coordinate);
+            if (recording)
+            {
+                Harness.Recorder.Features(
+                    fightId,
+                    turns + 1,
+                    "start",
+                    new CombatDomain(session, false).Capture("start")
+                );
+            }
+            var (result, chosen) = SearchTurn(session, options, coordinate, recording);
             nodes += result.Nodes;
             if (
                 options.Escalate > 0
@@ -279,6 +302,30 @@ public static class Rollout
             if (recording)
             {
                 Harness.Recorder.Turn(fightId, turns + 1, line, result.Score, result.Nodes);
+                for (var b = 0; b < result.Beam.Count; b++)
+                {
+                    var entry = result.Beam[b];
+                    if (entry.Features is null)
+                    {
+                        continue;
+                    }
+                    Harness.Recorder.Features(
+                        fightId,
+                        turns + 1,
+                        "beam",
+                        entry.Features,
+                        new
+                        {
+                            rank = b,
+                            est = entry.Estimate,
+                            real1 = entry.Real1,
+                            real = entry.Real,
+                            terminal = entry.Terminal,
+                            dup = entry.Duplicate,
+                            chosen = entry.Line.SequenceEqual(line),
+                        }
+                    );
+                }
             }
             if (trace is not null)
             {
@@ -335,6 +382,10 @@ public static class Rollout
                 if (action.Kind == "end")
                 {
                     fight.Block += live.Players.Sum(p => p.Creature.Block);
+                    if (recording)
+                    {
+                        Harness.Recorder.Features(fightId, turns + 1, "leaf", replay.Capture("leaf"));
+                    }
                 }
                 _ = replay.Apply(action);
             }
@@ -347,7 +398,21 @@ public static class Rollout
         var won = !CombatManager.Instance.IsInProgress && alive;
         if (recording)
         {
-            Harness.Recorder.EndFight(fightId, won, hpStart, session.Run.Players.Sum(p => p.Creature.CurrentHp), turns);
+            var (end, _) = Session.Current(0);
+            var enemies = end.Enemies.Where(e => e.MaxHp < 1_000_000).ToList();
+            var remaining =
+                enemies.Sum(e => e.IsAlive ? e.CurrentHp : 0) / (double)Math.Max(1, enemies.Sum(e => e.MaxHp));
+            Harness.Recorder.EndFight(
+                fightId,
+                new Harness.FightEnd(
+                    won,
+                    CombatManager.Instance.IsInProgress && alive,
+                    session.Run.Players.Sum(p => p.Creature.CurrentHp),
+                    remaining,
+                    turns,
+                    session.FightFor(end).Dealt
+                )
+            );
         }
         return (won, turns, nodes, sw.Elapsed.TotalMicroseconds);
     }

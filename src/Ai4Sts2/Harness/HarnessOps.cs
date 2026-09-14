@@ -80,6 +80,7 @@ public static class HarnessOps
             "wb.map" => Result(Session.Instance.Flow.MapSnapshot()),
             "wb.tune" => Result(WorkbenchTune(request.Args)),
             "wb.priors" => Result(WorkbenchPriors(request.Args)),
+            "wb.record" => Result(WorkbenchRecord(request.Args)),
             "kernel.patches" => Result(Patches.Applied ? Patches.Statuses : Patches.Preview()),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
             "wb.rewards" => Result(WorkbenchRewards()),
@@ -703,6 +704,13 @@ public static class HarnessOps
                 : Tuning.MaxTurns;
         var evaluation = Rollout.EvaluateEvent(Session.Instance, options, maxTurns);
         return new { Evaluation = evaluation, View = Session.Instance.Flow.View() };
+    }
+
+    private static object WorkbenchRecord(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        Recorder.Begin(a.GetProperty("dir").GetString()!, a.GetProperty("run").GetString()!);
+        return new { Run = Recorder.Run };
     }
 
     private static object WorkbenchPriors(JsonElement? args)

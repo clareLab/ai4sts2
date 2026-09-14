@@ -96,7 +96,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
 
     private double KillValue(uint id) => Tuning.RateDamage && _killValue.TryGetValue(id, out var v) ? v : 500;
 
-    private double Race(CombatState state)
+    private double RaceDeficit(CombatState state)
     {
         var streams = new List<(double Rate, int Hp, int[] Chain)>();
         var seat = state.Players.Count > 0 ? state.Players[Math.Min(ActivePlayer ?? 0, state.Players.Count - 1)] : null;
@@ -128,19 +128,19 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 incoming += hit * Math.Min(1, time - i);
             }
         }
-        double penalty = 0;
+        double deficit = 0;
         foreach (var player in state.Players)
         {
             var creature = player.Creature;
-            if (!creature.IsAlive)
+            if (creature.IsAlive)
             {
-                continue;
+                deficit += Math.Max(0, incoming - (creature.CurrentHp - 1) - (_blockPerTurn * time));
             }
-            var deficit = incoming - (creature.CurrentHp - 1) - (_blockPerTurn * time);
-            penalty -= Tuning.RaceWeight * Math.Max(0, deficit);
         }
-        return penalty;
+        return deficit;
     }
+
+    private double Race(CombatState state) => -Tuning.RaceWeight * RaceDeficit(state);
 
     private static string DebuffSignature(CombatState state)
     {
@@ -400,9 +400,12 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         }
     }
 
-    private static int ExpectedBlock(Player player)
+    private static int ExpectedBlock(Player player) =>
+        Tuning.HorizonBlock <= 0 ? 0 : HandBlock(player) * Tuning.HorizonBlock / 100;
+
+    private static int HandBlock(Player player)
     {
-        if (player.PlayerCombatState is not { } pcs || Tuning.HorizonBlock <= 0)
+        if (player.PlayerCombatState is not { } pcs)
         {
             return 0;
         }
@@ -422,7 +425,44 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 options.Add((cost, block));
             }
         }
-        var energy = pcs.Energy;
+        var total = Greedy(options, pcs.Energy);
+        if (player.Potions.Any(q => q.Id.Entry == "BLOCK_POTION"))
+        {
+            total += 12;
+        }
+        return total;
+    }
+
+    private static int HandDamage(Player player)
+    {
+        if (player.PlayerCombatState is not { } pcs)
+        {
+            return 0;
+        }
+        var options = new List<(int Cost, int Block)>();
+        foreach (var card in pcs.Hand.Cards)
+        {
+            if (
+                card.Type != CardType.Attack
+                || !card.DynamicVars.TryGetValue("Damage", out var v)
+                || !card.CanPlay(out _, out _)
+            )
+            {
+                continue;
+            }
+            var cost = card.EnergyCost.CostsX ? pcs.Energy : card.EnergyCost.GetWithModifiers(CostModifiers.Local);
+            var repeats = card.DynamicVars.TryGetValue("Repeat", out var r) ? Math.Max(1, (int)r.BaseValue) : 1;
+            var damage = (int)v.BaseValue * repeats;
+            if (damage > 0)
+            {
+                options.Add((cost, damage));
+            }
+        }
+        return Greedy(options, pcs.Energy);
+    }
+
+    private static int Greedy(List<(int Cost, int Block)> options, int energy)
+    {
         var total = 0;
         foreach (
             var (cost, block) in options.OrderByDescending(o =>
@@ -437,11 +477,249 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             energy -= cost;
             total += block;
         }
-        if (player.Potions.Any(q => q.Id.Entry == "BLOCK_POTION"))
+        return total;
+    }
+
+    public bool Record { get; set; }
+
+    public IReadOnlyList<KeyValuePair<string, double>>? Capture() =>
+        Record ? Capture(_atTurnStart ? "start" : "leaf") : null;
+
+    public IReadOnlyList<KeyValuePair<string, double>> Capture(string phase)
+    {
+        var state = State();
+        var f = new Dictionary<string, double>(128);
+        void Add(string name, double value)
         {
-            total += 12;
+            if (value != 0)
+            {
+                f[name] = f.GetValueOrDefault(name) + value;
+            }
         }
-        return total * Tuning.HorizonBlock / 100;
+        var run = Session.Run;
+        var players = state.Players;
+        var alive = players.Where(p => p.Creature.IsAlive).ToList();
+        var hp = alive.Sum(p => p.Creature.CurrentHp);
+        var maxHp = players.Sum(p => p.Creature.MaxHp);
+        var block = alive.Sum(p => p.Creature.Block);
+        Add("hp", hp);
+        Add("maxHp", maxHp);
+        Add("hpFrac", maxHp > 0 ? (double)hp / maxHp : 0);
+        Add("block", block);
+        Add("energy", alive.Sum(p => p.PlayerCombatState?.Energy ?? 0));
+        Add("maxEnergy", alive.Sum(p => p.PlayerCombatState?.MaxEnergy ?? 0));
+        Add("turn", players.Count > 0 ? players[0].PlayerCombatState?.TurnNumber ?? 0 : 0);
+        Add("players", players.Count);
+        Add("alivePlayers", alive.Count);
+        Add("ascension", run?.AscensionLevel ?? 0);
+        Add("act", (run?.CurrentActIndex ?? 0) + 1);
+        Add("hard", state.Encounter?.RoomType is RoomType.Elite or RoomType.Boss ? 1 : 0);
+        var handBlock = 0;
+        var handDamage = 0;
+        var strength = 0;
+        var dexterity = 0;
+        var attacks = 0;
+        var skills = 0;
+        foreach (var player in alive)
+        {
+            if (player.PlayerCombatState is not { } pcs)
+            {
+                continue;
+            }
+            Add("handSize", pcs.Hand.Cards.Count);
+            Add("drawCount", pcs.DrawPile.Cards.Count);
+            Add("discardCount", pcs.DiscardPile.Cards.Count);
+            Add("exhaustCount", pcs.ExhaustPile.Cards.Count);
+            foreach (var card in pcs.Hand.Cards)
+            {
+                switch (card.Type)
+                {
+                    case CardType.Attack:
+                        attacks++;
+                        break;
+                    case CardType.Skill:
+                        skills++;
+                        break;
+                    case CardType.Power:
+                        Add("powersInHand", 1);
+                        break;
+                    case CardType.None:
+                    case CardType.Status:
+                    case CardType.Curse:
+                    case CardType.Quest:
+                    default:
+                        Add("deadInHand", 1);
+                        break;
+                }
+                if (phase == "start")
+                {
+                    Add("hand:" + card.Id.Entry, 1);
+                }
+            }
+            handBlock += HandBlock(player);
+            handDamage += HandDamage(player);
+            Add("petsHp", pcs.Pets.Sum(pet => pet.CurrentHp));
+            Add("orbs", pcs.OrbQueue.Orbs.Count);
+            foreach (var power in player.Creature.Powers)
+            {
+                var amount = power.Amount;
+                switch (power)
+                {
+                    case StrengthPower:
+                        strength += amount;
+                        break;
+                    case DexterityPower:
+                        dexterity += amount;
+                        break;
+                    default:
+                        break;
+                }
+                Add("pp:" + power.Id.Entry, amount);
+                Add("pph:" + power.Id.Entry, amount * _horizon);
+            }
+            if (run is not null)
+            {
+                Add("deckSize", player.Deck.Cards.Count);
+                Add("deckUpgrades", player.Deck.Cards.Count(c => c.IsUpgraded));
+                foreach (var card in player.Deck.Cards)
+                {
+                    Add("deck:" + card.Id.Entry, 1);
+                }
+                foreach (var relic in player.Relics)
+                {
+                    Add("relic:" + relic.Id.Entry, 1);
+                }
+            }
+            Add("char:" + player.Character.Id.Entry, 1);
+        }
+        Add("attacksInHand", attacks);
+        Add("skillsInHand", skills);
+        Add("handBlock", handBlock);
+        Add("handDamage", handDamage);
+        Add("strengthXAttacks", strength * attacks);
+        Add("dexterityXSkills", dexterity * skills);
+        Add("room:" + (state.Encounter?.RoomType.ToString() ?? "None"), 1);
+        var present = new Dictionary<uint, Creature>();
+        foreach (var enemy in state.Enemies)
+        {
+            if (enemy.CombatId is { } id)
+            {
+                present[id] = enemy;
+            }
+        }
+        var enemyHp = 0;
+        var enemyMax = 0;
+        var enemyBlock = 0;
+        var aliveEnemies = 0;
+        var killed = 0;
+        var weakest = int.MaxValue;
+        foreach (var (id, rootMax) in _rootEnemyMaxHp)
+        {
+            if (rootMax >= 1_000_000)
+            {
+                continue;
+            }
+            enemyMax += rootMax;
+            if (present.TryGetValue(id, out var enemy) && enemy.MaxHp <= rootMax && enemy.IsAlive)
+            {
+                aliveEnemies++;
+                enemyHp += enemy.CurrentHp;
+                enemyBlock += enemy.Block;
+                weakest = Math.Min(weakest, enemy.CurrentHp);
+            }
+            else
+            {
+                killed++;
+            }
+        }
+        Add("enemyHp", enemyHp);
+        Add("enemyMaxHp", enemyMax);
+        Add("enemyHpFrac", enemyMax > 0 ? (double)enemyHp / enemyMax : 0);
+        Add("enemyBlock", enemyBlock);
+        Add("aliveEnemies", aliveEnemies);
+        Add("killed", killed);
+        Add("weakestHp", weakest == int.MaxValue ? 0 : weakest);
+        Add("dealt", Dealt(state));
+        var targets = state.PlayerCreatures;
+        var incoming = 0;
+        var following = 0;
+        var spike = 0;
+        var incomingPerTurn = 0.0;
+        var hitsPerTurn = 0.0;
+        var seat = players.Count > 0 ? players[Math.Min(ActivePlayer ?? 0, players.Count - 1)] : null;
+        foreach (var enemy in state.Enemies)
+        {
+            if (!enemy.IsAlive || enemy.Monster is null || enemy.MaxHp >= 1_000_000)
+            {
+                continue;
+            }
+            Add("enemy:" + enemy.Monster.Id.Entry, 1);
+            foreach (var power in enemy.Powers)
+            {
+                Add("ep:" + power.Id.Entry, power.Amount);
+                Add("eph:" + power.Id.Entry, power.Amount * _horizon);
+            }
+            if (enemy.Monster.NextMove is not { } move)
+            {
+                continue;
+            }
+            foreach (var intent in move.Intents)
+            {
+                Add("intent:" + intent.GetType().Name, 1);
+                if (intent is not AttackIntent attack)
+                {
+                    continue;
+                }
+                foreach (var player in alive)
+                {
+                    using var scope = Session.ActAs(player);
+                    incoming += attack.GetTotalDamage(targets, enemy);
+                }
+            }
+            if (seat is not null)
+            {
+                var threat = ThreatOf(enemy, state, seat);
+                following += threat.Damage[1];
+                for (var i = 1; i < threat.Damage.Length; i++)
+                {
+                    spike = Math.Max(spike, threat.Damage[i]);
+                }
+                incomingPerTurn += threat.PerTurn;
+                hitsPerTurn += threat.HitsPerTurn;
+            }
+        }
+        var (self, plating) = ProbeFor(state);
+        var probeSelf = self.Sum();
+        var probePlating = plating.Sum();
+        var through = Math.Max(0, incoming + probeSelf - block - probePlating);
+        var hpAfter = hp - through;
+        Add("incoming", incoming);
+        Add("probeSelf", probeSelf);
+        Add("probePlating", probePlating);
+        Add("through", through);
+        Add("throughAfterHand", Math.Max(0, through - handBlock));
+        Add("lethal", through >= hp ? 1 : 0);
+        Add("lethalGap", Math.Max(0, through - hp + 1));
+        Add("hpAfter", hpAfter);
+        var frac = maxHp > 0 ? (double)hpAfter / maxHp : 0;
+        var bucket =
+            frac <= 0.15 ? 0
+            : frac <= 0.3 ? 1
+            : frac <= 0.5 ? 2
+            : frac <= 0.75 ? 3
+            : 4;
+        Add("hpAfterBucket" + bucket, 1);
+        Add("following", following);
+        Add("spike", spike);
+        Add("reserveGap", Math.Max(0, following - hpAfter));
+        Add("spikeGap", Math.Max(0, spike - hpAfter));
+        Add("incomingPerTurn", incomingPerTurn);
+        Add("hitsPerTurn", hitsPerTurn);
+        Add("raceDeficit", RaceDeficit(state));
+        Add("damagePerTurn", _damagePerTurn);
+        Add("blockPerTurn", _blockPerTurn);
+        Add("horizonTurns", _horizon);
+        return f.ToList();
     }
 
     public Session Session { get; }

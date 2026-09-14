@@ -42,6 +42,8 @@ public interface ISearchDomain<TAction>
     public double Estimate();
 
     public double Horizon();
+
+    public IReadOnlyList<KeyValuePair<string, double>>? Capture();
 }
 
 public sealed record BeamEntry<TAction>(
@@ -50,7 +52,9 @@ public sealed record BeamEntry<TAction>(
     double Real1,
     double Real,
     string Bucket,
-    bool Duplicate
+    bool Duplicate,
+    bool Terminal = false,
+    IReadOnlyList<KeyValuePair<string, double>>? Features = null
 );
 
 public sealed record SearchResult<TAction>(
@@ -206,6 +210,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 {
                     Apply(action);
                 }
+                var features = turn == 1 && !domain.Terminal ? domain.Capture() : null;
                 if (!candidate.Terminal)
                 {
                     foreach (var action in domain.Closing())
@@ -216,6 +221,7 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                 }
                 var postKey = domain.Terminal ? "terminal:" + string.Join("/", full) : domain.Key();
                 var real1 = domain.Evaluate();
+                var terminal = domain.Terminal;
                 double real;
                 var duplicate = _solved.TryGetValue(postKey, out var known);
                 if (duplicate)
@@ -242,7 +248,18 @@ public sealed class Search<TAction>(ISearchDomain<TAction> domain, SearchOptions
                     _solved[postKey] = real;
                     _verified++;
                 }
-                entries.Add(new BeamEntry<TAction>(full, candidate.Score, real1, real, candidate.Bucket, duplicate));
+                entries.Add(
+                    new BeamEntry<TAction>(
+                        full,
+                        candidate.Score,
+                        real1,
+                        real,
+                        candidate.Bucket,
+                        duplicate,
+                        terminal,
+                        features
+                    )
+                );
                 if (real > bestScore || (real == bestScore && real1 > bestReal1))
                 {
                     bestScore = real;

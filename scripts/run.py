@@ -383,6 +383,7 @@ def main():
     ap.add_argument("--tune", action="append", default=[])
     ap.add_argument("--priors", default=os.path.join(os.path.dirname(__file__), "..", "metrics", "priors.json"))
     ap.add_argument("--tuning", default=tuning.PATH)
+    ap.add_argument("--records", default=os.path.join(metrics.ROOT, ".local", "records"))
     ap.add_argument("--no-event-eval", action="store_true")
     ap.add_argument("--instance", default="wb")
     ap.add_argument("--net", choices=["host", "single"], default="host")
@@ -398,6 +399,9 @@ def main():
         for k, _, v in (t.partition("=") for t in a.tune)
     }
     knobs = tuning.apply(wb, {"Record": a.record, **tune}, a.tuning)
+    run_id = metrics.make_id(metrics.now(), "run")
+    if a.record:
+        wb.call("wb.record", {"dir": os.path.abspath(a.records), "run": run_id})
     priors = {}
     if a.priors and os.path.exists(a.priors):
         with open(a.priors, encoding="utf-8") as f:
@@ -445,6 +449,7 @@ def main():
             "tuning": knobs["tuning"],
             "modes": knobs["modes"],
             "priors": len(priors),
+            "records": os.path.join(a.records, run_id + ".jsonl") if a.record else None,
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
             "floors": sum(c["floors"] for c in cases),
@@ -456,6 +461,7 @@ def main():
         },
         {"cases": traces},
         {"game": ping.get("game"), "mod": ping.get("mod")},
+        run_id=run_id,
     )
 
 

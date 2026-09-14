@@ -90,6 +90,8 @@ def worker(name, jobs, a, log_dir, results, lock):
             a.tag,
             "--tuning",
             os.path.join(log_dir, "tuning.json"),
+            "--records",
+            os.path.join(log_dir, "records"),
             *a.run_args.split(),
         ]
         log_path = os.path.join(log_dir, f"{character}-{a.players}p-{seed}.log")
