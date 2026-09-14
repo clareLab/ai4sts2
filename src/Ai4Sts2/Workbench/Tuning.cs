@@ -19,6 +19,8 @@ public static class Tuning
 
     public static bool Doom { get; set; } = true;
 
+    public static int DoomWeight { get; set; } = 12;
+
     public static int HalvingAbove { get; set; } = 4;
 
     public static int SmithCandidates { get; set; } = 5;
@@ -31,7 +33,7 @@ public static class Tuning
 
     public static int RolloutHpFloor { get; set; } = 65;
 
-    public static bool EliteProbe { get; set; } = true;
+    public static bool EliteProbe { get; set; }
 
     public static int RolloutSamples { get; set; } = 1;
 
@@ -113,9 +115,9 @@ public static class Tuning
 
     public static int HardTurns { get; set; } = 3;
 
-    public static int RolloutNodes { get; set; } = 400;
+    public static int RolloutNodes { get; set; } = 150;
 
-    public static int RolloutBeam { get; set; } = 3;
+    public static int RolloutBeam { get; set; } = 2;
 
     public static int RolloutTurns { get; set; } = 1;
 
@@ -123,9 +125,9 @@ public static class Tuning
 
     public static int MaxTurns { get; set; } = 30;
 
-    public static int Fights { get; set; } = 2;
+    public static int Fights { get; set; } = 6;
 
-    public static bool BossProbe { get; set; } = true;
+    public static bool BossProbe { get; set; }
 
     public static int BossTurns { get; set; } = 6;
 

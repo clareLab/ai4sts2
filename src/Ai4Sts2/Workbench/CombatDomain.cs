@@ -716,6 +716,11 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         Add("incomingPerTurn", incomingPerTurn);
         Add("hitsPerTurn", hitsPerTurn);
         Add("raceDeficit", RaceDeficit(state));
+        if (Deadline(state) is { } deadline)
+        {
+            Add("deadline", deadline.Survive + (phase == "start" ? 1 : 0));
+            Add("deadlineGap", deadline.Gap(phase == "start", _damagePerTurn));
+        }
         Add("damagePerTurn", _damagePerTurn);
         Add("blockPerTurn", _blockPerTurn);
         Add("horizonTurns", _horizon);
@@ -870,7 +875,9 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         return list;
     }
 
-    public double Evaluate()
+    public double Evaluate() => Evaluate(true);
+
+    private double Evaluate(bool deadline)
     {
         var state = State();
         var players = state.Players;
@@ -916,10 +923,6 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 }
                 score -= enemy.Block;
                 score += PowerScore(enemy, -1, state);
-                if (Tuning.Doom)
-                {
-                    score += Doom(enemy);
-                }
             }
             else
             {
@@ -945,6 +948,10 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         if (Tuning.RaceWeight > 0)
         {
             score += Race(state);
+        }
+        if (deadline && !Terminal)
+        {
+            score += DeadlineScore(state, true);
         }
         foreach (var player in players)
         {
@@ -987,7 +994,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     break;
             }
         }
-        var score = 100 * model.Value(phase, features, hp, Tuning.LossHp);
+        var score = (100 * model.Value(phase, features, hp, Tuning.LossHp)) + DeadlineScore(state, phase == "start");
         foreach (var player in state.Players)
         {
             if (!player.Creature.IsAlive)
@@ -1011,7 +1018,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             return Learned(model, _atTurnStart ? "start" : "leaf");
         }
         var state = State();
-        var score = Evaluate();
+        var score = Evaluate(false);
         if (Terminal)
         {
             return score;
@@ -1078,24 +1085,44 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             score -= _hpWeight * Tuning.ReservePercent / 100.0 * Math.Max(0, following - cover - hpAfter);
             score -= _hpWeight * Tuning.SpikePercent / 100.0 * Math.Max(0, spike - cover - hpAfter);
         }
-        return score;
+        return score + DeadlineScore(state, _atTurnStart);
     }
 
-    private static double Doom(Creature enemy)
+    private readonly record struct DeadlineInfo(int Survive, int Bulk)
     {
-        double score = 0;
-        foreach (var power in enemy.Powers)
+        public double Gap(bool turnStart, double damagePerTurn) =>
+            Math.Max(0, Bulk - ((Survive + (turnStart ? 1 : 0)) * damagePerTurn));
+    }
+
+    private static DeadlineInfo? Deadline(CombatState state)
+    {
+        var survive = int.MaxValue;
+        var bulk = 0;
+        foreach (var enemy in state.Enemies)
         {
-            if (power is SandpitPower sandpit && sandpit.Target is { IsAlive: true })
+            if (enemy.IsAlive && enemy.MaxHp < 1_000_000)
             {
-                score += sandpit.Amount * 150;
-                if (sandpit.Amount <= 1)
+                bulk += enemy.CurrentHp + enemy.Block;
+            }
+            foreach (var power in enemy.Powers)
+            {
+                if (power is SandpitPower sandpit && sandpit.Target is { IsAlive: true })
                 {
-                    score -= 3_000;
+                    survive = Math.Min(survive, sandpit.Amount - 1);
                 }
             }
         }
-        return score;
+        return survive == int.MaxValue ? null : new DeadlineInfo(Math.Max(0, survive), bulk);
+    }
+
+    private double DeadlineScore(CombatState state, bool turnStart)
+    {
+        if (!Tuning.Doom || Deadline(state) is not { } deadline)
+        {
+            return 0;
+        }
+        var gap = deadline.Gap(turnStart, _damagePerTurn);
+        return !turnStart && deadline.Survive == 0 ? -100_000 - gap : -Tuning.DoomWeight * gap;
     }
 
     public static int Dealt(CombatState state)
