@@ -226,7 +226,9 @@ public sealed class Snapshot
         var ns = t.Namespace ?? "";
         return typeof(Task).IsAssignableFrom(t)
             || typeof(CancellationTokenSource).IsAssignableFrom(t)
-            || t == typeof(Type)
+            || typeof(Type).IsAssignableFrom(t)
+            || t == typeof(ModelId)
+            || t == typeof(MegaCrit.Sts2.Core.Logging.Logger)
             || ns.StartsWith("System.Threading", StringComparison.Ordinal)
             || ns.StartsWith("System.Reflection", StringComparison.Ordinal)
             || ns.StartsWith("System.Runtime", StringComparison.Ordinal)
