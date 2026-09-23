@@ -298,7 +298,7 @@ def play_run(wb, a, seed):
             outcome = "stuck"
             break
         t1 = time.time()
-        route_scores = {f"{o['col']},{o['row']}": round(o["score"], 1) for o in plan["options"]}
+        route_scores = {f"{o['col']},{o['row']}": round(o["score"], 4) for o in plan["options"]}
         path_eval = plan.get("paths")
         if path_eval is not None:
             path_eval["combined"] = {

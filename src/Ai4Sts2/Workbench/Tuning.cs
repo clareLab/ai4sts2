@@ -185,6 +185,8 @@ public static class Tuning
 
     public static string Value { get; set; } = "hand";
 
+    public static string Survival { get; set; } = "hand";
+
     private static readonly Knobs _knobs = new(typeof(Tuning));
 
     public static Dictionary<string, object?> Apply(JsonElement? args, bool reset) => _knobs.Apply(args, reset);

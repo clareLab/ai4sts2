@@ -17,13 +17,14 @@ public sealed record RoutePlan(
     string Reason
 );
 
-public sealed class RoutePlanner(MapView map, int gold)
+public sealed class RoutePlanner(MapView map, int gold, RunFeatures features = default, int floor = 0)
 {
     private readonly Dictionary<(int Col, int Row), MapPointView> _points = map.Points.ToDictionary(p =>
         (p.Col, p.Row)
     );
     private readonly Dictionary<((int Col, int Row) Coord, int Hp), (double Value, (int Col, int Row)? Next)> _memo =
     [];
+    private readonly int _row = map.Current is { Length: 2 } current ? current[1] : 0;
 
     public static RoutePlan Plan(Session session, SearchOptions options, int maxTurns, bool paths)
     {
@@ -38,7 +39,19 @@ public sealed class RoutePlanner(MapView map, int gold)
             (double)p.Creature.CurrentHp / Math.Max(1, p.Creature.MaxHp)
         )!;
         var ratio = (double)seat.Creature.CurrentHp / Math.Max(1, seat.Creature.MaxHp);
-        var planner = new RoutePlanner(session.Flow.MapSnapshot(), run.Players.Sum(p => p.Gold));
+        var deck = seat.Deck.Cards.ToList();
+        var planner = new RoutePlanner(
+            session.Flow.MapSnapshot(),
+            run.Players.Sum(p => p.Gold),
+            new RunFeatures(
+                deck.Count,
+                deck.Count(c => c.CurrentUpgradeLevel > 0),
+                seat.Relics.Count,
+                seat.Potions.Count(),
+                seat.Character.Id.Entry
+            ),
+            run.TotalFloor
+        );
         var scored = choices
             .Select(c => new RouteScore(c.Col, c.Row, c.Type, planner.Best((c.Col, c.Row), ratio).Value, 0, null, null))
             .ToList();
@@ -84,7 +97,9 @@ public sealed class RoutePlanner(MapView map, int gold)
     public double Future((int Col, int Row) coord, double hp)
     {
         return !_points.TryGetValue(coord, out var point) || point.Children.Count == 0
-            ? hp * Tuning.RouteHpValue
+            ? SurvivalModel.Current is null
+                ? hp * Tuning.RouteHpValue
+                : 1
             : point.Children.Max(c => Best((c[0], c[1]), hp).Value);
     }
 
@@ -96,6 +111,26 @@ public sealed class RoutePlanner(MapView map, int gold)
             return known;
         }
         var point = _points[coord];
+        if (SurvivalModel.Current is { } model)
+        {
+            var at = floor + point.Row - _row;
+            var survive = 1 - model.Hazard(features, point.Type, hp, at);
+            var next = Math.Clamp(hp + model.Delta(features, point.Type, hp, at), 0, 1);
+            (double Value, (int Col, int Row)? Next) learned;
+            if (point.Children.Count == 0 || point.Type == "Boss")
+            {
+                learned = (survive, null);
+            }
+            else
+            {
+                var child = point
+                    .Children.Select(c => ((c[0], c[1]), Best((c[0], c[1]), next).Value))
+                    .MaxBy(x => x.Value);
+                learned = (survive * child.Value, child.Item1);
+            }
+            _memo[key] = learned;
+            return learned;
+        }
         var value = Value(point.Type, ref hp);
         hp -= Loss(point.Type);
         if (hp <= Tuning.RouteDanger / 100.0)

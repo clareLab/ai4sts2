@@ -82,6 +82,7 @@ public static class HarnessOps
             "wb.priors" => Result(WorkbenchPriors(request.Args)),
             "wb.record" => Result(WorkbenchRecord(request.Args)),
             "wb.value" => Result(WorkbenchValue(request.Args)),
+            "wb.survival" => Result(WorkbenchSurvival(request.Args)),
             "wb.valbench" => Result(WorkbenchValueBench(request.Args)),
             "kernel.patches" => Result(Patches.Applied ? Patches.Statuses : Patches.Preview()),
             "wb.travel" => Result(WorkbenchTravel(request.Args)),
@@ -727,6 +728,13 @@ public static class HarnessOps
             TrainedRuns = model.TrainedRuns.Count,
             UnresolvedPowers = unresolved,
         };
+    }
+
+    private static object WorkbenchSurvival(JsonElement? args)
+    {
+        var a = args ?? throw new ArgumentException("args required");
+        var model = SurvivalModel.Load(a.GetProperty("path").GetString()!);
+        return new { model.Hash, model.Count };
     }
 
     private static object WorkbenchValueBench(JsonElement? args)

@@ -315,6 +315,90 @@ def beam_accuracy(model, rows, fights, hold, a):
     }
 
 
+def run_floors(tags):
+    out = []
+    for path in glob.glob(os.path.join(ROOT, "metrics", "runs", "*-run-*.json")):
+        with open(path, encoding="utf-8") as f:
+            run = json.load(f)
+        if run.get("kind") != "run" or (tags and run.get("tag") not in tags):
+            continue
+        for case in (run.get("detail") or run).get("cases", []):
+            floors = case.get("floorsDetail") or []
+            died = case.get("outcome") == "died"
+            for i, fl in enumerate(floors):
+                party = fl.get("party")
+                if not party:
+                    continue
+                me = party[0]
+                f = {
+                    "bias": 1.0,
+                    "hpFrac": me["hp"] / max(1, me["maxHp"]),
+                    "deckSize": len(me["deck"]) / 20,
+                    "upgrades": sum(1 for c in me["deck"] if c.get("upgrade")) / 5,
+                    "relics": len(me["relics"]) / 5,
+                    "floor": fl["floor"] / 50,
+                    "potions": sum(1 for q in me["potions"] if q) / 3,
+                    "room:" + fl["type"]: 1.0,
+                    "char:" + me["character"]: 1.0,
+                }
+                after = fl.get("hpAfter")
+                delta = None if after is None else (after - me["hp"]) / max(1, me["maxHp"])
+                out.append((run["id"], f, 1.0 if (i == len(floors) - 1 and died) else 0.0, delta))
+    return out
+
+
+def survival(a):
+    rows = run_floors({t for t in a.tags.split(",") if t})
+    if len(rows) < 200:
+        raise SystemExit("not enough floor states")
+    support = {}
+    for _, f, _, _ in rows:
+        for n in f:
+            support[n] = support.get(n, 0) + 1
+    names = sorted(n for n, c in support.items() if c >= a.min_support)
+    index = {n: j for j, n in enumerate(names)}
+    lam = np.array([0.0 if n == "bias" else a.lambda_num for n in names])
+    folds = {}
+    for hold in range(3):
+        train = [r for r in rows if fold(r[0]) != hold]
+        test = [r for r in rows if fold(r[0]) == hold]
+        x = matrix([{"f": f} for _, f, _, _ in train], names, index)
+        w = logistic(x, np.array([y for _, _, y, _ in train]), lam)
+        pairs = []
+        for _, f, y, _ in test:
+            z = sum(w[index[n]] * v for n, v in f.items() if n in index)
+            pairs.append((1 / (1 + np.exp(-np.clip(z, -30, 30))), y))
+        base = float(np.mean([y for _, y in pairs]))
+        pos = [p for p, y in pairs if y > 0.5]
+        neg = [p for p, y in pairs if y < 0.5]
+        folds[hold] = {
+            "rows": len(pairs),
+            "brier": round(float(np.mean([(p - y) ** 2 for p, y in pairs])), 5),
+            "brierBase": round(base * (1 - base), 5),
+            "auc": round(sum((i > j) + 0.5 * (i == j) for i in pos for j in neg) / max(1, len(pos) * len(neg)), 3),
+        }
+    x = matrix([{"f": f} for _, f, _, _ in rows], names, index)
+    w = logistic(x, np.array([y for _, _, y, _ in rows]), lam)
+    kept = [r for r in rows if r[3] is not None]
+    dx = matrix([{"f": f} for _, f, _, _ in kept], names, index)
+    dw = ridge(dx, np.array([r[3] for r in kept]), np.maximum(lam, 1e-6))
+    resid = dx @ dw - np.array([r[3] for r in kept])
+    payload = {
+        "names": names,
+        "w": w.tolist(),
+        "delta": dw.tolist(),
+        "deltaRmse": round(float(np.sqrt(np.mean(resid**2))), 4),
+        "rows": len(rows),
+    }
+    digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+    payload["hash"] = digest
+    with open(a.out, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+    print("survival", json.dumps(folds, ensure_ascii=False), "deltaRmse", payload["deltaRmse"])
+    print("wrote", a.out, digest, len(names), "features")
+    metrics.record("survival", {"rows": len(rows), "hash": digest, "folds": folds, "replay": False}, None, {})
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--records", default="")
@@ -326,7 +410,11 @@ def main():
     ap.add_argument("--loss-hp", type=float, default=60.0)
     ap.add_argument("--holdout-side", action="store_true", default=False)
     ap.add_argument("--contrast", action="store_true", default=False)
+    ap.add_argument("--survival", action="store_true", default=False)
     a = ap.parse_args()
+    if a.survival:
+        survival(a)
+        return
     paths = [p for spec in a.records.split(",") if spec for p in glob.glob(spec)]
     for tag in [t for t in a.tags.split(",") if t]:
         paths += glob.glob(os.path.join(ROOT, ".local", "batches", tag, "records", "*.jsonl"))
