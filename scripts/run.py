@@ -1,12 +1,25 @@
 import argparse
 import json
 import os
+import random
 import time
 
 import tuning
 from harness import Harness, HarnessError
 
 import metrics
+
+EXPLORE = {"p": 0.0, "rng": random.Random(0), "count": 0}
+
+
+def choose(ev, entry, kind):
+    options = [o for o in ev["options"] if not o.get("error")] or ev["options"]
+    best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+    if options and EXPLORE["p"] > 0 and EXPLORE["rng"].random() < EXPLORE["p"]:
+        best = EXPLORE["rng"].choice(options)
+        EXPLORE["count"] += 1
+        entry.setdefault("explored", []).append({"kind": kind, "label": best["label"]})
+    return best
 
 
 def autoplay(wb, a, hard=False):
@@ -90,7 +103,7 @@ def handle_treasure(wb, a, entry):
     if len(relics) > 1:
         ev = wb.call("wb.evalrelic")["evaluation"]
         entry["evaluation"] = ev
-        best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+        best = choose(ev, entry, "relic")
         if best is not None and best.get("index") is not None:
             pick = best["index"]
     votes = [pick if relics else None for _ in range(a.players)]
@@ -115,7 +128,7 @@ def handle_rest(wb, a, entry, v, players):
         entry.setdefault("smithEvaluations", []).append(ev)
         if slot == 0:
             entry["evaluation"] = ev
-        best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+        best = choose(ev, entry, "rest")
         if best is None:
             options.append(v["restOptions"][0])
             continue
@@ -185,7 +198,7 @@ def take_rewards(wb, a, entry):
                 entry.setdefault("evaluations", []).append(ev)
                 if player == 0:
                     entry["evaluation"] = ev
-                best = next((o for o in ev["options"] if o["label"] == ev["best"]), None)
+                best = choose(ev, entry, "reward")
                 if best is not None and best.get("card") is not None:
                     res = wb.call("wb.take", {"index": reward["index"], "card": best["card"], "player": player})
                     taken.append({"kind": "card", "card": best["label"], "ok": res["ok"], "player": player})
@@ -384,6 +397,7 @@ def main():
     ap.add_argument("--priors", default=os.path.join(os.path.dirname(__file__), "..", "metrics", "priors.json"))
     ap.add_argument("--tuning", default=tuning.PATH)
     ap.add_argument("--value", default="")
+    ap.add_argument("--explore", type=float, default=0.0)
     ap.add_argument("--records", default=os.path.join(metrics.ROOT, ".local", "records"))
     ap.add_argument("--no-event-eval", action="store_true")
     ap.add_argument("--instance", default="wb")
@@ -399,6 +413,8 @@ def main():
         k: (int(v) if v.lstrip("-").isdigit() else v.lower() == "true")
         for k, _, v in (t.partition("=") for t in a.tune)
     }
+    EXPLORE["p"] = a.explore
+    EXPLORE["rng"] = random.Random(f"{a.character}:{a.seed}")
     knobs = tuning.apply(wb, {"Record": a.record, **tune}, a.tuning, a.value or None)
     run_id = metrics.make_id(metrics.now(), "run")
     if a.record:
@@ -450,6 +466,8 @@ def main():
             "tuning": knobs["tuning"],
             "modes": knobs["modes"],
             "priors": len(priors),
+            "explore": a.explore,
+            "explored": EXPLORE["count"],
             "records": os.path.join(a.records, run_id + ".jsonl") if a.record else None,
             "patches": ping.get("patches"),
             "wallSeconds": round(time.time() - t0, 3),
