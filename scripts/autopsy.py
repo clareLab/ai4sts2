@@ -20,7 +20,7 @@ def act_of(floor):
     return 1 if floor <= 17 else 2 if floor <= 33 else 3
 
 
-def deaths(paths, characters, tags):
+def fights(paths, characters, tags, fatal):
     cases = []
     for path in paths:
         with open(path, encoding="utf-8") as f:
@@ -32,48 +32,48 @@ def deaths(paths, characters, tags):
         if characters and run.get("character") not in characters:
             continue
         for case in (run.get("detail") or run).get("cases", []):
-            if case.get("outcome") != "died":
-                continue
             floors = case.get("floorsDetail") or []
-            if not floors:
-                continue
-            fl = floors[-1]
-            combat = fl.get("combat")
-            party = fl.get("party")
-            if not combat or combat.get("won") or not party or not fl.get("model"):
-                continue
-            me = party[0]
-            if me["hp"] <= 1 or me["hp"] > me["maxHp"]:
-                continue
-            cases.append(
-                {
-                    "run": run["id"],
-                    "tag": run.get("tag"),
-                    "seed": case["seed"],
-                    "floor": fl["floor"],
-                    "act": act_of(fl["floor"]),
-                    "type": fl["type"],
-                    "encounter": fl["model"],
-                    "character": me["character"],
-                    "net": run.get("net"),
-                    "hp": me["hp"],
-                    "maxHp": me["maxHp"],
-                    "deckSize": len(me["deck"]),
-                    "potions": sum(1 for q in me["potions"] if q),
-                    "turns": combat.get("turns"),
-                    "party": [
-                        {
-                            "character": p["character"],
-                            "hp": p["hp"],
-                            "maxHp": p["maxHp"],
-                            "deck": [f"{c['id']}+{c['upgrade']}" if c.get("upgrade") else c["id"] for c in p["deck"]],
-                            "relics": [r if isinstance(r, str) else r["id"] for r in p["relics"]],
-                            "potions": [q for q in p["potions"] if q and isinstance(q, str)],
-                        }
-                        for p in party
-                    ],
-                }
-            )
+            if fatal:
+                floors = floors[-1:] if case.get("outcome") == "died" else []
+            for fl in floors:
+                combat = fl.get("combat")
+                party = fl.get("party")
+                if not combat or not party or not fl.get("model") or combat.get("won") == fatal:
+                    continue
+                me = party[0]
+                if me["hp"] <= 1 or me["hp"] > me["maxHp"]:
+                    continue
+                cases.append(
+                    {
+                        "run": run["id"],
+                        "tag": run.get("tag"),
+                        "seed": case["seed"],
+                        "floor": fl["floor"],
+                        "act": act_of(fl["floor"]),
+                        "type": fl["type"],
+                        "encounter": fl["model"],
+                        "character": me["character"],
+                        "net": run.get("net"),
+                        "hp": me["hp"],
+                        "maxHp": me["maxHp"],
+                        "deckSize": len(me["deck"]),
+                        "potions": sum(1 for q in me["potions"] if q),
+                        "turns": combat.get("turns"),
+                        "party": [
+                            {
+                                "character": q["character"],
+                                "hp": q["hp"],
+                                "maxHp": q["maxHp"],
+                                "deck": [
+                                    f"{c['id']}+{c['upgrade']}" if c.get("upgrade") else c["id"] for c in q["deck"]
+                                ],
+                                "relics": [x if isinstance(x, str) else x["id"] for x in q["relics"]],
+                                "potions": [x for x in q["potions"] if x and isinstance(x, str)],
+                            }
+                            for q in party
+                        ],
+                    }
+                )
     return cases
 
 
@@ -155,6 +155,13 @@ def label(rungs):
     return "structural"
 
 
+def census(wb, case, a):
+    rungs = {}
+    for i in range(a.repeat):
+        rungs[f"roll{i}"] = fight(wb, case, case["seed"] if i == 0 else f"{case['seed']}~{i}", {}, a.max_turns)
+    return rungs
+
+
 def autopsy(wb, case, a, priors):
     deep = {"maxNodes": a.deep_nodes, "beam": a.deep_beam, "turns": a.deep_turns}
     rungs = {}
@@ -183,8 +190,8 @@ def worker(name, jobs, a, rows, lock, priors):
             return
         t0 = time.time()
         try:
-            rungs = autopsy(wb, case, a, priors)
-            verdict = label(rungs)
+            rungs = census(wb, case, a) if a.repeat else autopsy(wb, case, a, priors)
+            verdict = f"p={sum(r['won'] for r in rungs.values()) / len(rungs):.2f}" if a.repeat else label(rungs)
         except HarnessError as e:
             rungs = {}
             verdict = "error: " + str(e)[:200]
@@ -213,14 +220,17 @@ def main():
     ap.add_argument("--deep-beam", type=int, default=8)
     ap.add_argument("--deep-turns", type=int, default=4)
     ap.add_argument("--surgery", type=int, default=0)
+    ap.add_argument("--repeat", type=int, default=0)
+    ap.add_argument("--won", action="store_true")
     a = ap.parse_args()
     paths = [p for spec in a.runs.split(",") if spec for p in glob.glob(spec)] or sorted(
         glob.glob(os.path.join(ROOT, "metrics", "runs", "*-run-*.json"))
     )
-    pool = deaths(
+    pool = fights(
         paths,
         {c.strip().upper() for c in a.characters.split(",") if c.strip()},
         {t.strip() for t in a.tags.split(",") if t.strip()},
+        not a.won,
     )
     cases = spread(pool, a.cases)
     instances = [n.strip() for n in a.instances.split(",") if n.strip()]
@@ -244,12 +254,34 @@ def main():
     for row in rows:
         key = row["verdict"].split(":")[0]
         verdicts[key] = verdicts.get(key, 0) + 1
+    if a.repeat:
+        scored = [(r, sum(x["won"] for x in r["rungs"].values()) / max(1, len(r["rungs"]))) for r in rows if r["rungs"]]
+        verdicts = {
+            "fights": len(scored),
+            "meanP": round(sum(p for _, p in scored) / max(1, len(scored)), 3),
+            "certain": sum(1 for _, p in scored if p >= 1.0),
+            "risky": sum(1 for _, p in scored if p < 1.0),
+            "byType": {
+                t: round(
+                    sum(p for r, p in scored if r["type"] == t) / max(1, sum(1 for r, _ in scored if r["type"] == t)), 3
+                )
+                for t in sorted({r["type"] for r, _ in scored})
+            },
+            "byAct": {
+                str(act): round(
+                    sum(p for r, p in scored if r["act"] == act) / max(1, sum(1 for r, _ in scored if r["act"] == act)),
+                    3,
+                )
+                for act in sorted({r["act"] for r, _ in scored})
+            },
+        }
     summary = {
         "cases": len(rows),
         "pool": len(pool),
         "tags": a.tags,
         "deep": {"nodes": a.deep_nodes, "beam": a.deep_beam, "turns": a.deep_turns},
         "surgery": a.surgery,
+        "repeat": a.repeat,
         "verdicts": verdicts,
         "byAct": {
             str(act): {v: sum(1 for r in rows if r["act"] == act and r["verdict"].split(":")[0] == v) for v in verdicts}
