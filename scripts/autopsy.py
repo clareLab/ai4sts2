@@ -101,6 +101,31 @@ def healed(case):
     return full
 
 
+def load_priors():
+    path = os.path.join(ROOT, "metrics", "priors.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def surgery(case, priors, count, upgrade):
+    table = priors.get(case["character"], {})
+    cut = copy.deepcopy(case)
+    for player in cut["party"]:
+        deck = player["deck"]
+        ranked = sorted(range(len(deck)), key=lambda i: table.get(deck[i].split("+")[0], {}).get("prior", 0.0))
+        if upgrade:
+            for i in ranked[-count:]:
+                base = deck[i].split("+")[0]
+                deck[i] = base + "+1"
+        else:
+            for i in sorted(ranked[:count], reverse=True):
+                if len(deck) > 10:
+                    deck.pop(i)
+    return cut
+
+
 def fight(wb, case, seed, search, max_turns):
     setup(wb, case, seed)
     hard = case["type"] in ("Boss", "Elite")
@@ -125,10 +150,12 @@ def label(rungs):
         return "resource"
     if rungs.get("deepFull", {}).get("won"):
         return "resource+tactical"
+    if rungs.get("trim", {}).get("won") or rungs.get("sharp", {}).get("won"):
+        return "deck"
     return "structural"
 
 
-def autopsy(wb, case, a):
+def autopsy(wb, case, a, priors):
     deep = {"maxNodes": a.deep_nodes, "beam": a.deep_beam, "turns": a.deep_turns}
     rungs = {}
     rungs["base0"] = fight(wb, case, case["seed"], {}, a.max_turns)
@@ -139,10 +166,14 @@ def autopsy(wb, case, a):
         rungs["full"] = fight(wb, healed(case), case["seed"], {}, a.max_turns)
         if not rungs["deep"]["won"] and not rungs["full"]["won"]:
             rungs["deepFull"] = fight(wb, healed(case), case["seed"], deep, a.max_turns)
+    if a.surgery and not any(r["won"] for r in rungs.values()) and priors.get(case["character"]):
+        rungs["trim"] = fight(wb, surgery(healed(case), priors, a.surgery, False), case["seed"], {}, a.max_turns)
+        if not rungs["trim"]["won"]:
+            rungs["sharp"] = fight(wb, surgery(healed(case), priors, a.surgery, True), case["seed"], {}, a.max_turns)
     return rungs
 
 
-def worker(name, jobs, a, rows, lock):
+def worker(name, jobs, a, rows, lock, priors):
     wb = Harness(name, timeout=7200)
     tuning.apply(wb)
     while True:
@@ -152,7 +183,7 @@ def worker(name, jobs, a, rows, lock):
             return
         t0 = time.time()
         try:
-            rungs = autopsy(wb, case, a)
+            rungs = autopsy(wb, case, a, priors)
             verdict = label(rungs)
         except HarnessError as e:
             rungs = {}
@@ -181,6 +212,7 @@ def main():
     ap.add_argument("--deep-nodes", type=int, default=12000)
     ap.add_argument("--deep-beam", type=int, default=8)
     ap.add_argument("--deep-turns", type=int, default=4)
+    ap.add_argument("--surgery", type=int, default=0)
     a = ap.parse_args()
     paths = [p for spec in a.runs.split(",") if spec for p in glob.glob(spec)] or sorted(
         glob.glob(os.path.join(ROOT, "metrics", "runs", "*-run-*.json"))
@@ -200,7 +232,9 @@ def main():
     rows = []
     lock = threading.Lock()
     t0 = time.time()
-    threads = [threading.Thread(target=worker, args=(n, jobs, a, rows, lock), daemon=True) for n in instances]
+    threads = [
+        threading.Thread(target=worker, args=(n, jobs, a, rows, lock, load_priors()), daemon=True) for n in instances
+    ]
     for t in threads:
         t.start()
         time.sleep(1)
@@ -215,6 +249,7 @@ def main():
         "pool": len(pool),
         "tags": a.tags,
         "deep": {"nodes": a.deep_nodes, "beam": a.deep_beam, "turns": a.deep_turns},
+        "surgery": a.surgery,
         "verdicts": verdicts,
         "byAct": {
             str(act): {v: sum(1 for r in rows if r["act"] == act and r["verdict"].split(":")[0] == v) for v in verdicts}
