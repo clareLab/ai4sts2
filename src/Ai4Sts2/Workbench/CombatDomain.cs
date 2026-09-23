@@ -41,6 +41,22 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
 
     private sealed record Threat(int[] Damage, double PerTurn, double HitsPerTurn, int MaxHit, int Moves);
 
+    private const int Steps = 20;
+
+    private const int Slots = 3;
+
+    private readonly double[,] _curve = new double[Steps + 1, Slots + 1];
+    private readonly bool _welded;
+
+    private double Reach(double hp, int potions)
+    {
+        var scaled = Math.Clamp(hp, 0, 1) * Steps;
+        var low = (int)Math.Floor(scaled);
+        var high = Math.Min(Steps, low + 1);
+        var slot = Math.Clamp(potions, 0, Slots);
+        return _curve[low, slot] + ((_curve[high, slot] - _curve[low, slot]) * (scaled - low));
+    }
+
     public CombatDomain(Session session, bool probe = true)
     {
         Session = session;
@@ -69,6 +85,17 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             _blockPotionValue = Math.Max(_potionValue, _hpWeight * Math.Min(12, spike - Tuning.BlockPrior));
         }
         _probe = probe && Modes.ProbeTurnEnd;
+        if (SurvivalModel.Current is not null && ValueModel.Current is not null)
+        {
+            for (var i = 0; i <= Steps; i++)
+            {
+                for (var q = 0; q <= Slots; q++)
+                {
+                    _curve[i, q] = Rollout.Survival(Session, (double)i / Steps, q);
+                }
+            }
+            _welded = true;
+        }
         var prior = 8.0 * (state.Players.Count > 0 ? state.Players[0].PlayerCombatState?.MaxEnergy ?? 3 : 3);
         var fight = Session.FightFor(state);
         _damagePerTurn = fight.Turns > 0 ? Math.Max(prior * 0.5, (double)fight.Dealt / fight.Turns) : prior;
@@ -903,6 +930,10 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
         if (Terminal)
         {
             var alive = players.Where(p => p.Creature.IsAlive).ToList();
+            if (_welded)
+            {
+                return alive.Count == 0 ? 0 : Rollout.Survival(Session);
+            }
             if (alive.Count == 0)
             {
                 var turn = players.Max(p => p.PlayerCombatState?.TurnNumber ?? 0);
@@ -1007,6 +1038,12 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                 default:
                     break;
             }
+        }
+        if (_welded && model.Predict(phase, features) is var (p, h))
+        {
+            var maxHp = Math.Max(1, state.Players.Count > 0 ? state.Players[0].Creature.MaxHp : 1);
+            var kept = Math.Max(0, hp - Math.Clamp(h, 0, hp));
+            return p * Reach(kept / maxHp, state.Players.Sum(q => q.Potions.Count()));
         }
         var alpha = model.Alpha(phase);
         var score = 100 * model.Value(phase, features, hp, Tuning.LossHp);

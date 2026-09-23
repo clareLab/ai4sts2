@@ -383,6 +383,7 @@ def main():
     ap.add_argument("--tune", action="append", default=[])
     ap.add_argument("--priors", default=os.path.join(os.path.dirname(__file__), "..", "metrics", "priors.json"))
     ap.add_argument("--tuning", default=tuning.PATH)
+    ap.add_argument("--value", default="")
     ap.add_argument("--records", default=os.path.join(metrics.ROOT, ".local", "records"))
     ap.add_argument("--no-event-eval", action="store_true")
     ap.add_argument("--instance", default="wb")
@@ -398,7 +399,7 @@ def main():
         k: (int(v) if v.lstrip("-").isdigit() else v.lower() == "true")
         for k, _, v in (t.partition("=") for t in a.tune)
     }
-    knobs = tuning.apply(wb, {"Record": a.record, **tune}, a.tuning)
+    knobs = tuning.apply(wb, {"Record": a.record, **tune}, a.tuning, a.value or None)
     run_id = metrics.make_id(metrics.now(), "run")
     if a.record:
         wb.call("wb.record", {"dir": os.path.abspath(a.records), "run": run_id})

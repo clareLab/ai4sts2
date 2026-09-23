@@ -124,6 +124,12 @@ public sealed class ValueModel
         return model;
     }
 
+    public (double P, double H)? Predict(string phase, IReadOnlyList<KeyValuePair<string, double>> features)
+    {
+        var head = Phases.TryGetValue(phase, out var found) ? found : Phases.Values.First();
+        return head.Contrast is null ? head.Predict(features) : null;
+    }
+
     public double Alpha(string phase) => (Phases.TryGetValue(phase, out var head) ? head : Phases.Values.First()).Alpha;
 
     public double Value(string phase, IReadOnlyList<KeyValuePair<string, double>> features, double hp, double lossHp)

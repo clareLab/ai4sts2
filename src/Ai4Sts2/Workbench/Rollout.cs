@@ -741,7 +741,9 @@ public static class Rollout
         return delta;
     }
 
-    public static double Survival(Session session)
+    public static double Survival(Session session) => Survival(session, null, null);
+
+    public static double Survival(Session session, double? hpOverride, int? potionsOverride)
     {
         var run = session.Run;
         if (SurvivalModel.Current is null || run is null)
@@ -765,12 +767,12 @@ public static class Rollout
                 deck.Count,
                 deck.Count(c => c.CurrentUpgradeLevel > 0),
                 seat.Relics.Count,
-                seat.Potions.Count(),
+                potionsOverride ?? seat.Potions.Count(),
                 seat.Character.Id.Entry
             ),
             run.TotalFloor
         );
-        var hp = (double)seat.Creature.CurrentHp / Math.Max(1, seat.Creature.MaxHp);
+        var hp = hpOverride ?? ((double)seat.Creature.CurrentHp / Math.Max(1, seat.Creature.MaxHp));
         return map.Current is { Length: 2 } at ? planner.Future((at[0], at[1]), hp) : hp;
     }
 
