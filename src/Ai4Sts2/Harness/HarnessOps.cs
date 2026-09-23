@@ -733,7 +733,19 @@ public static class HarnessOps
     private static object WorkbenchSurvival(JsonElement? args)
     {
         var a = args ?? throw new ArgumentException("args required");
-        var model = SurvivalModel.Load(a.GetProperty("path").GetString()!);
+        if (!a.TryGetProperty("path", out var path))
+        {
+            return new
+            {
+                Loaded = SurvivalModel.Current?.Hash,
+                Now = Rollout.Survival(Session.Instance),
+                Curve = Enumerable
+                    .Range(0, 11)
+                    .Select(i => Math.Round(Rollout.Survival(Session.Instance, i / 10.0, 1), 5))
+                    .ToList(),
+            };
+        }
+        var model = SurvivalModel.Load(path.GetString()!);
         return new { model.Hash, model.Count };
     }
 

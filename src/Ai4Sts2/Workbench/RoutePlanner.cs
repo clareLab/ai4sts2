@@ -96,7 +96,16 @@ public sealed class RoutePlanner(MapView map, int gold, RunFeatures features = d
 
     public double Future((int Col, int Row) coord, double hp)
     {
-        return !_points.TryGetValue(coord, out var point) || point.Children.Count == 0
+        if (!_points.TryGetValue(coord, out var point))
+        {
+            var entry = _points.Values.Where(p => p.Row == _points.Values.Min(q => q.Row)).ToList();
+            return entry.Count == 0
+                ? SurvivalModel.Current is null
+                    ? hp * Tuning.RouteHpValue
+                    : 1
+                : entry.Max(p => Best((p.Col, p.Row), hp).Value);
+        }
+        return point.Children.Count == 0
             ? SurvivalModel.Current is null
                 ? hp * Tuning.RouteHpValue
                 : 1

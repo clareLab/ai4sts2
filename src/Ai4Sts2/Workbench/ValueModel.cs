@@ -124,6 +124,8 @@ public sealed class ValueModel
         return model;
     }
 
+    public bool Composable => Phases.Values.All(h => h.Contrast is null);
+
     public (double P, double H)? Predict(string phase, IReadOnlyList<KeyValuePair<string, double>> features)
     {
         var head = Phases.TryGetValue(phase, out var found) ? found : Phases.Values.First();

@@ -85,7 +85,7 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
             _blockPotionValue = Math.Max(_potionValue, _hpWeight * Math.Min(12, spike - Tuning.BlockPrior));
         }
         _probe = probe && Modes.ProbeTurnEnd;
-        if (SurvivalModel.Current is not null && ValueModel.Current is not null)
+        if (SurvivalModel.Current is not null && ValueModel.Current is { Composable: true })
         {
             for (var i = 0; i <= Steps; i++)
             {
@@ -1039,8 +1039,9 @@ public sealed class CombatDomain : ISearchDomain<SearchAction>
                     break;
             }
         }
-        if (_welded && model.Predict(phase, features) is var (p, h))
+        if (_welded && model.Predict(phase, features) is { } prediction)
         {
+            var (p, h) = prediction;
             var maxHp = Math.Max(1, state.Players.Count > 0 ? state.Players[0].Creature.MaxHp : 1);
             var kept = Math.Max(0, hp - Math.Clamp(h, 0, hp));
             return p * Reach(kept / maxHp, state.Players.Sum(q => q.Potions.Count()));
