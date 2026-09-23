@@ -608,6 +608,11 @@ public static class Rollout
             wins++;
         }
         var hpAfterFights = run.Players.Sum(p => p.Creature.CurrentHp);
+        if (SurvivalModel.Current is not null)
+        {
+            var reached = wins == fights && run.Players.Any(p => p.Creature.IsAlive) ? Survival(session) : 0;
+            return new RolloutSummary(fights, wins, lost, reached, details, null, null, 0);
+        }
         var score =
             (wins * Tuning.RolloutWin)
             + (hpAfterFights * Tuning.RolloutHp)
