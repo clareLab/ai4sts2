@@ -884,7 +884,9 @@ public static class HarnessOps
         {
             plan = plan with { Fights = 0, Boss = true };
         }
-        var evaluation = Rollout.EvaluateChoices(session, "rest", choices, SearchOptionsFrom(a), plan);
+        var evaluation = SurvivalModel.Current is null
+            ? Rollout.EvaluateChoices(session, "rest", choices, SearchOptionsFrom(a), plan)
+            : Rollout.Estimate(session, "rest", choices);
         return new { Evaluation = evaluation, View = session.Flow.View() };
     }
 

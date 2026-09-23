@@ -736,6 +736,66 @@ public static class Rollout
         return delta;
     }
 
+    public static double Survival(Session session)
+    {
+        var run = session.Run;
+        if (SurvivalModel.Current is null || run is null)
+        {
+            return double.NaN;
+        }
+        var alive = run.Players.Where(p => p.Creature.IsAlive).ToList();
+        var seat = (alive.Count > 0 ? alive : run.Players.ToList()).MinBy(p =>
+            (double)p.Creature.CurrentHp / Math.Max(1, p.Creature.MaxHp)
+        );
+        if (seat is null)
+        {
+            return 0;
+        }
+        var deck = seat.Deck.Cards.ToList();
+        var map = session.Flow.MapSnapshot();
+        var planner = new RoutePlanner(
+            map,
+            run.Players.Sum(p => p.Gold),
+            new RunFeatures(
+                deck.Count,
+                deck.Count(c => c.CurrentUpgradeLevel > 0),
+                seat.Relics.Count,
+                seat.Potions.Count(),
+                seat.Character.Id.Entry
+            ),
+            run.TotalFloor
+        );
+        var hp = (double)seat.Creature.CurrentHp / Math.Max(1, seat.Creature.MaxHp);
+        return map.Current is { Length: 2 } at ? planner.Future((at[0], at[1]), hp) : hp;
+    }
+
+    public static ChoiceEvaluation Estimate(
+        Session session,
+        string kind,
+        IReadOnlyList<(string Label, int? Index, Action Apply)> choices
+    )
+    {
+        var sw = Stopwatch.StartNew();
+        var root = Loader.Take();
+        var results = new List<ChoiceResult>();
+        try
+        {
+            foreach (var (label, index, apply) in choices)
+            {
+                apply();
+                var score = Survival(session);
+                results.Add(new ChoiceResult(label, index, new RolloutSummary(0, 0, 0, score, [], null, null, 0)));
+                _ = Loader.Restore(root, session.Pump);
+            }
+        }
+        finally
+        {
+            root.Release();
+        }
+        var best = results.Count > 0 ? results.MaxBy(r => r.Rollout.Score)!.Label : "";
+        return new ChoiceEvaluation(kind, results, best, sw.Elapsed.TotalMicroseconds);
+    }
+
     public static ChoiceEvaluation EvaluateChoices(
         Session session,
         string kind,
