@@ -140,8 +140,9 @@ def main():
     elif not os.path.exists(frozen):
         with open(frozen, "w", encoding="utf-8") as f:
             f.write("{}\n")
-    if os.path.exists(tuning.VALUE_PATH):
-        shutil.copyfile(tuning.VALUE_PATH, os.path.join(log_dir, "value.json"))
+    for source in (tuning.VALUE_PATH, tuning.SURVIVAL_PATH):
+        if os.path.exists(source):
+            shutil.copyfile(source, os.path.join(log_dir, os.path.basename(source)))
     print(f"fleet {a.tag}: {jobs.qsize()} jobs ({skipped} already recorded) on {a.instances}")
     results = []
     lock = threading.Lock()

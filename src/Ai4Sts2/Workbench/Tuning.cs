@@ -133,7 +133,7 @@ public static class Tuning
 
     public static int MaxTurns { get; set; } = 30;
 
-    public static int Fights { get; set; } = 6;
+    public static int Fights { get; set; } = 1;
 
     public static bool BossProbe { get; set; }
 
